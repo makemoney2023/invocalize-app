@@ -145,7 +145,11 @@ const CallDataCard = ({ data }: { data: CallData }) => {
             <span className="text-sm font-medium mr-2">Sentiment Score:</span>
             <SentimentIcon score={data.sentimentScore} />
           </div>
-          <Badge variant={data.sentimentScore > 0.66 ? "success" : data.sentimentScore > 0.33 ? "warning" : "destructive"}>
+          <Badge variant={
+            data.sentimentScore > 0.66 ? "default" :
+            data.sentimentScore > 0.33 ? "secondary" :
+            "destructive"
+          }>
             {(data.sentimentScore * 100).toFixed(0)}%
           </Badge>
         </div>
@@ -205,7 +209,11 @@ const CallDetailsModal = ({ data }: { data: CallData }) => {
               <span className="text-sm font-medium mr-2">Sentiment Score:</span>
               <SentimentIcon score={data.sentimentScore} />
             </div>
-            <Badge variant={data.sentimentScore > 0.66 ? "success" : data.sentimentScore > 0.33 ? "warning" : "destructive"}>
+            <Badge variant={
+              data.sentimentScore > 0.66 ? "default" :
+              data.sentimentScore > 0.33 ? "secondary" :
+              "destructive"
+            }>
               {(data.sentimentScore * 100).toFixed(0)}%
             </Badge>
           </div>
@@ -309,9 +317,16 @@ const RecentCalls = () => {
         call.phoneNumber.includes(searchTerm)
       )
       .sort((a, b) => {
-        if (a[sortColumn] < b[sortColumn]) return sortDirection === 'asc' ? -1 : 1
-        if (a[sortColumn] > b[sortColumn]) return sortDirection === 'asc' ? 1 : -1
-        return 0
+        const aValue = a[sortColumn];
+        const bValue = b[sortColumn];
+        
+        if (aValue === null || bValue === null) {
+          return 0; // Handle null values
+        }
+        
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
       })
   }, [sampleData, searchTerm, sortColumn, sortDirection])
 
