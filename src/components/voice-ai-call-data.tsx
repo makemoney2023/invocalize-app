@@ -87,6 +87,9 @@ interface Lead {
   completed: boolean;
   price: number;
   answered_by: string;
+  variables?: {
+    city?: string;
+  };
 }
 
 enum CallStatus {
@@ -437,62 +440,108 @@ const Dashboard = () => {
   const averageDuration = calculateAverageDuration(leads)
   const completedCalls = leads.filter(lead => lead.completed).length
   const averagePrice = leads.reduce((sum, lead) => sum + lead.price, 0) / totalCalls
-  const humanAnsweredCalls = leads.filter(lead => lead.answered_by === 'human').length
-  const voicemailCalls = leads.filter(lead => lead.answered_by === 'voicemail').length
+  const inboundCalls = leads.filter(lead => lead.inbound).length
+  const outboundCalls = totalCalls - inboundCalls
+  const errorRate = (leads.filter(lead => lead.error_message !== null).length / totalCalls) * 100
 
-  const calculatePercentage = (value: number) => ((value / totalCalls) * 100).toFixed(1)
-  const upcomingAppointments = leads
-    .filter(lead => lead.analysis?.appointment_booked) // Ensure this line is correct
-    .map(lead => ({
-      id: lead.id,
-      date: lead.analysis?.appointment_date || 'N/A', // Provide a default value if undefined
-      time: lead.analysis?.appointment_time || 'N/A', // Provide a default value if undefined
-      firstName: lead.name.split(' ')[0],
-      lastName: lead.name.split(' ')[1] || '',
-      interestedIn: lead.use_case,
-      phoneNumber: lead.phone_number
-    }))
-    .slice(0, 5); // Show only the next 5 appointments
+  const sentimentDistribution = leads.reduce((acc, lead) => {
+    const score = lead.analysis?.sentiment_score || 0;
+    if (score > 0.66) acc.positive++;
+    else if (score > 0.33) acc.neutral++;
+    else acc.negative++;
+    return acc;
+  }, { positive: 0, neutral: 0, negative: 0 });
+
+  const callDurationDistribution = leads.reduce((acc, lead) => {
+    const duration = lead.call_length;
+    if (duration <= 1) acc['0-1']++;
+    else if (duration <= 3) acc['1-3']++;
+    else if (duration <= 5) acc['3-5']++;
+    else acc['5+']++;
+    return acc;
+  }, { '0-1': 0, '1-3': 0, '3-5': 0, '5+': 0 });
+
+  const topUseCases = leads.reduce((acc, lead) => {
+    acc[lead.use_case] = (acc[lead.use_case] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const sortedUseCases = Object.entries(topUseCases)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5);
+
+  const appointmentsBooked = leads.filter(lead => lead.analysis?.appointment_booked).length;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
-          <Phone className="h-4 w-4 text-muted-foreground" />
+        <CardHeader>
+          <CardTitle>Total Calls</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{totalCalls}</div>
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Completed Calls</CardTitle>
-          <CheckCircle className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{completedCalls}</div>
-          <p className="text-xs text-muted-foreground">
-            {calculatePercentage(completedCalls)}% of total calls
-          </p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Average Duration</CardTitle>
-          <Clock className="h-4 w-4 text-muted-foreground" />
+        <CardHeader>
+          <CardTitle>Average Duration</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{averageDuration.toFixed(2)} min</div>
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Average Cost</CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
+        <CardHeader>
+          <CardTitle>Average Price</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">${averagePrice.toFixed(2)}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Inbound vs Outbound</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between">
+            <div>
+              <div className="text-lg font-semibold">Inbound</div>
+              <div className="text-2xl font-bold">{inboundCalls}</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold">Outbound</div>
+              <div className="text-2xl font-bold">{outboundCalls}</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Error Rate</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{errorRate.toFixed(2)}%</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Sentiment Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between">
+            <div>
+              <div className="text-sm">Positive</div>
+              <div className="text-lg font-bold">{sentimentDistribution.positive}</div>
+            </div>
+            <div>
+              <div className="text-sm">Neutral</div>
+              <div className="text-lg font-bold">{sentimentDistribution.neutral}</div>
+            </div>
+            <div>
+              <div className="text-sm">Negative</div>
+              <div className="text-lg font-bold">{sentimentDistribution.negative}</div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -701,14 +750,21 @@ const CalendarPage = () => {
 }
 
 const CallCard = ({ lead }: { lead: Lead }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
-    <Card>
+    <Card className="mb-4">
       <CardHeader>
-        <CardTitle>{lead.name}</CardTitle>
+        <div className="flex justify-between items-center">
+          <CardTitle>{lead.name}</CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => setIsExpanded(!isExpanded)}>
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
         <CardDescription>{lead.phone_number}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           <div>
             <p className="text-sm font-medium">Status</p>
             <p className="text-sm">{lead.completed ? 'Completed' : 'Incomplete'}</p>
@@ -725,11 +781,35 @@ const CallCard = ({ lead }: { lead: Lead }) => {
             <p className="text-sm font-medium">Cost</p>
             <p className="text-sm">${lead.price.toFixed(2)}</p>
           </div>
+          <div>
+            <p className="text-sm font-medium">City</p>
+            <p className="text-sm">{lead.variables?.city || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Use Case</p>
+            <p className="text-sm">{lead.use_case}</p>
+          </div>
         </div>
-        <div className="mt-4">
+        <div className="mb-4">
           <p className="text-sm font-medium">Summary</p>
           <p className="text-sm">{lead.summary}</p>
         </div>
+        {isExpanded && (
+          <>
+            <div className="mb-4">
+              <p className="text-sm font-medium">Call Transcript</p>
+              <p className="text-sm">{lead.call_transcript}</p>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm font-medium">Sentiment Score</p>
+              <p className="text-sm">{lead.analysis?.sentiment_score || 'N/A'}</p>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm font-medium">Appointment</p>
+              <p className="text-sm">{lead.analysis?.appointment?.booked ? 'Booked' : 'Not Booked'}</p>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )
