@@ -76,10 +76,11 @@ interface Lead {
   call_duration: number;
   // ... other properties ...
   analysis?: {
-    appointment: any // Add this line
-    sentiment_score: number; // Add this line if you need sentiment score
+    appointment: any
+    sentiment_score: number;
+    summary?: string; // Add this line
   };
-  use_case: string; // Add this line
+  use_case: string;
 }
 
 enum CallStatus {
