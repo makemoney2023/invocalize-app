@@ -126,7 +126,7 @@ const FullTranscript = ({ transcript }: { transcript: string }) => {
   return (
     <div className="transcript">
       <h3>Full Transcript</h3>
-      <p>{transcript}</p>
+      <pre>{JSON.stringify(transcript, null, 2)}</pre>
     </div>
   );
 };
