@@ -209,10 +209,12 @@ const CallDataCard = ({ data }: { data: Lead }) => {
         </div>
         <div className="mb-4">
           <h4 className="text-sm font-medium mb-2">Call Summary</h4>
-          <p className="text-sm text-muted-foreground">{data.analysis?.summary ? data.analysis.summary : 'N/A'}</p>
+          <p className="text-sm text-muted-foreground">
+            {data.analysis?.summary ?? 'N/A'}
+          </p>
         </div>
         <Suspense fallback={<div>Loading...</div>}>
-          <TranscriptModal transcriptData={data.call_transcript ? data.call_transcript : []} />
+          <TranscriptModal transcriptData={data.call_transcript ?? []} />
         </Suspense>
       </CardContent>
     </Card>
