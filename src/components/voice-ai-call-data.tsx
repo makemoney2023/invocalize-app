@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus } from 'lucide-react'
+import { useState, useMemo, Key, ReactNode, Suspense } from 'react'
+import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +41,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useLeadsData } from '@/hooks/useLeadsData'
+import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
 
 interface CallData {
   id: string
@@ -65,6 +67,27 @@ interface Appointment {
   phoneNumber: string
 }
 
+interface Lead {
+  call_transcript: any
+  email: ReactNode
+  phone_number: ReactNode
+  name: ReactNode
+  id: Key | null | undefined
+  call_duration: number;
+  // ... other properties ...
+  analysis?: {
+    appointment: any // Add this line
+    sentiment_score: number; // Add this line if you need sentiment score
+  };
+  use_case: string; // Add this line
+}
+
+enum CallStatus {
+  Voicemail = 'voicemail',
+  Answered = 'answered',
+  Transferred = 'transferred',
+}
+
 const SentimentIcon = ({ score }: { score: number }) => {
   if (score > 0.66) return <Smile className="w-6 h-6 text-green-500" />
   if (score > 0.33) return <Meh className="w-6 h-6 text-yellow-500" />
@@ -84,42 +107,78 @@ const RVTypeIcon = ({ type }: { type: string }) => {
   }
 }
 
-const TranscriptModal = ({ transcript }: { transcript: { speaker: string; text: string }[] }) => {
+const CallSummary = ({ summary }: { summary: string }) => {
+  return (
+    <div className="call-summary">
+      <h3>Call Summary</h3>
+      <p>{summary}</p>
+    </div>
+  );
+};
+
+const CallDuration = ({ duration }: { duration: number }) => {
+  const minutes = Math.floor(duration);
+  const seconds = Math.round((duration - minutes) * 60);
+  return <span>{minutes}m {seconds}s</span>;
+};
+
+const FullTranscript = ({ transcript }: { transcript: string }) => {
+  return (
+    <div className="transcript">
+      <h3>Full Transcript</h3>
+      <p>{transcript}</p>
+    </div>
+  );
+};
+
+const MessageList = ({ messages }: { messages?: Array<{
+    id: Key | null | undefined user: string; text: string; created_at: string 
+}> }) => {
+  // Provide a default value if messages is undefined
+  const safeMessages = messages || []
+
+  return (
+    <div className="message-list">
+      {safeMessages.map((message) => (
+        <div key={message.id} className={`message ${message.user}`}>
+          <span className="timestamp">{new Date(message.created_at).toLocaleTimeString()}</span>
+          <span className="speaker">{message.user}:</span>
+          <span className="text">{message.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const TranscriptModal = ({ transcriptData }: { transcriptData: any }) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <FileText className="w-4 h-4 mr-2" />
-          View Transcript
-        </Button>
+        <Button variant="outline">View Transcript</Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Call Transcript</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {transcript.map((entry, index) => (
-            <div key={index} className={`flex ${entry.speaker === 'AI' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[70%] p-3 rounded-lg ${entry.speaker === 'AI' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                <p className="font-semibold mb-1">{entry.speaker}</p>
-                <p>{entry.text}</p>
-              </div>
-            </div>
-          ))}
+          <CallSummary summary={transcriptData.summary} />
+          <FullTranscript transcript={transcriptData.concatenated_transcript} />
+          <MessageList messages={transcriptData.transcripts} /> {/* Ensure this is correct */}
+          <CallDuration duration={transcriptData.call_length} />
         </div>
       </DialogContent>
     </Dialog>
-  )
-}
+  );
+};
 
-const CallDataCard = ({ data }: { data: CallData }) => {
+const CallDataCard = ({ data }: { data: Lead }) => {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
     <Card className="w-full mb-4">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-xl font-bold">
-          {data.firstName} {data.lastName}
+          {data.name}
         </CardTitle>
         <Button
           variant="ghost"
@@ -133,55 +192,29 @@ const CallDataCard = ({ data }: { data: CallData }) => {
         <div className="flex flex-wrap items-center gap-4 mb-4">
           <div className="flex items-center">
             <Phone className="w-4 h-4 mr-2" />
-            <span className="text-sm">{data.phoneNumber}</span>
+            <span className="text-sm">{data.phone_number}</span>
           </div>
           <div className="flex items-center">
-            <RVTypeIcon type={data.interestedIn} />
-            <span className="text-sm">{data.interestedIn}</span>
+            <Mail className="w-4 h-4 mr-2" />
+            <span className="text-sm">{data.email}</span>
           </div>
-        </div>
-        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
-            <span className="text-sm font-medium mr-2">Sentiment Score:</span>
-            <SentimentIcon score={data.sentimentScore} />
+            <span className="text-sm">{data.use_case}</span>
           </div>
-          <Badge variant={
-            data.sentimentScore > 0.66 ? "default" :
-            data.sentimentScore > 0.33 ? "secondary" :
-            "destructive"
-          }>
-            {(data.sentimentScore * 100).toFixed(0)}%
-          </Badge>
-        </div>
-        <div className="flex items-center mb-4">
-          <CalendarIcon className="w-4 h-4 mr-2" />
-          <span className="text-sm">
-            {data.appointmentBooked ? `Appointment: ${data.appointmentBooked}` : 'No appointment booked'}
-          </span>
         </div>
         <div className="mb-4">
           <h4 className="text-sm font-medium mb-2">Call Summary</h4>
-          <p className="text-sm text-muted-foreground">{data.callSummary}</p>
+          <p className="text-sm text-muted-foreground">{data.analysis?.summary ? data.analysis.summary : 'N/A'}</p>
         </div>
-        <TranscriptModal transcript={data.transcript} />
-        {isExpanded && (
-          <div className="mt-4 space-y-4">
-            <div>
-              <h4 className="text-sm font-medium mb-2">Actions Taken</h4>
-              <ul className="list-disc list-inside text-sm text-muted-foreground">
-                {data.actionsTaken.map((action, index) => (
-                  <li key={index}>{action}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
+        <Suspense fallback={<div>Loading...</div>}>
+          <TranscriptModal transcriptData={data.call_transcript ? data.call_transcript : []} />
+        </Suspense>
       </CardContent>
     </Card>
   )
 }
 
-const CallDetailsModal = ({ data }: { data: CallData }) => {
+const CallDetailsModal = ({ data }: { data: Lead }) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -190,52 +223,51 @@ const CallDetailsModal = ({ data }: { data: CallData }) => {
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
-            {data.firstName} {data.lastName}
+            {data.name}
           </DialogTitle>
         </DialogHeader>
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center">
               <Phone className="w-4 h-4 mr-2" />
-              <span className="text-sm">{data.phoneNumber}</span>
+              <span className="text-sm">{data.phone_number}</span>
             </div>
             <div className="flex items-center">
-              <RVTypeIcon type={data.interestedIn} />
-              <span className="text-sm">{data.interestedIn}</span>
+              <Mail className="w-4 h-4 mr-2" />
+              <span className="text-sm">{data.email}</span>
+            </div>
+            <div className="flex items-center">
+              <RVTypeIcon type={data.use_case} />
+              <span className="text-sm">{data.use_case}</span>
             </div>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <span className="text-sm font-medium mr-2">Sentiment Score:</span>
-              <SentimentIcon score={data.sentimentScore} />
+              <SentimentIcon score={data.analysis?.sentiment_score || 0} />
             </div>
             <Badge variant={
-              data.sentimentScore > 0.66 ? "default" :
-              data.sentimentScore > 0.33 ? "secondary" :
-              "destructive"
+              data.analysis?.sentiment_score ? 
+                data.analysis.sentiment_score > 0.66 ? "default" :
+                data.analysis.sentiment_score > 0.33 ? "secondary" :
+                "destructive" : "destructive"
             }>
-              {(data.sentimentScore * 100).toFixed(0)}%
+              {data.analysis?.sentiment_score ? `${(data.analysis.sentiment_score * 100).toFixed(0)}%` : 'N/A'}
             </Badge>
           </div>
           <div className="flex items-center">
             <CalendarIcon className="w-4 h-4 mr-2" />
             <span className="text-sm">
-              {data.appointmentBooked ? `Appointment: ${data.appointmentBooked}` : 'No appointment booked'}
+              {data.analysis?.appointment?.booked 
+                ? `Appointment: ${data.analysis.appointment.date} at ${data.analysis.appointment.time}` 
+                : 'No appointment booked'}
             </span>
           </div>
           <div>
             <h4 className="text-sm font-medium mb-2">Call Summary</h4>
-            <p className="text-sm text-muted-foreground">{data.callSummary}</p>
+            <p className="text-sm text-muted-foreground">{data.analysis?.summary || 'N/A'}</p>
           </div>
-          <div>
-            <h4 className="text-sm font-medium mb-2">Actions Taken</h4>
-            <ul className="list-disc list-inside text-sm text-muted-foreground">
-              {data.actionsTaken.map((action, index) => (
-                <li key={index}>{action}</li>
-              ))}
-            </ul>
-          </div>
-          <TranscriptModal transcript={data.transcript} />
+          <TranscriptModal transcriptData={data.call_transcript} />
         </div>
       </DialogContent>
     </Dialog>
@@ -243,94 +275,30 @@ const CallDetailsModal = ({ data }: { data: CallData }) => {
 }
 
 const RecentCalls = () => {
+  const { leads, loading, error } = useLeadsData()
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<keyof CallData>('id')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [sortColumn, setSortColumn] = useState<keyof Lead>(() => 'created_at')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
-  const sampleData: CallData[] = [
-    {
-      id: "1",
-      phoneNumber: "+1 (555) 123-4567",
-      firstName: "John",
-      lastName: "Doe",
-      interestedIn: "Travel Trailer",
-      sentimentScore: 0.85,
-      callSummary: "Customer inquired about new travel trailer models. Expressed interest in lightweight options for easy towing.",
-      actionsTaken: ["Provided information on lightweight travel trailers", "Scheduled follow-up call", "Sent email with product brochures"],
-      appointmentBooked: "2023-09-15 10:00 AM",
-      transcript: [
-        { speaker: "AI", text: "Hello! Thank you for calling our RV dealership. How may I assist you today?" },
-        { speaker: "Caller", text: "Hi, I'm interested in learning about your travel trailers, especially lightweight models." },
-        { speaker: "AI", text: "We have a great selection of lightweight travel trailers. Are you looking for any specific features or size range?" },
-        { speaker: "Caller", text: "I'd like something easy to tow with my SUV, maybe around 20-25 feet long." },
-        { speaker: "AI", text: "Great! We have several models that fit that criteria. I'd be happy to email you some brochures and schedule an appointment to view them in person. Would you like that?" },
-        { speaker: "Caller", text: "Yes, that would be perfect. Thank you!" },
-      ]
-    },
-    {
-      id: "2",
-      phoneNumber: "+1 (555) 987-6543",
-      firstName: "Jane",
-      lastName: "Smith",
-      interestedIn: "Fifth Wheel",
-      sentimentScore: 0.45,
-      callSummary: "Customer reported issues with their recently purchased fifth wheel. Frustration expressed over recurring problems.",
-      actionsTaken: ["Logged support ticket", "Escalated to service department", "Offered priority servicing"],
-      appointmentBooked: null,
-      transcript: [
-        { speaker: "AI", text: "Thank you for calling our RV service department. How can I help you today?" },
-        { speaker: "Caller", text: "I'm having problems with the fifth wheel I bought from you last month. This is getting really frustrating." },
-        { speaker: "AI", text: "I'm very sorry to hear that. Can you please describe the issues you're experiencing?" },
-        { speaker: "Caller", text: "The slide-out keeps jamming, and now the water heater isn't working properly." },
-        { speaker: "AI", text: "I apologize for these inconveniences. I'm logging a support ticket right now and will escalate this to our service department. We'll offer you priority servicing to resolve these issues as quickly as possible." },
-        { speaker: "Caller", text: "Alright, I hope this gets fixed soon." },
-      ]
-    },
-    {
-      id: "3",
-      phoneNumber: "+1 (555) 246-8135",
-      firstName: "Alice",
-      lastName: "Johnson",
-      interestedIn: "Class A Motorhome",
-      sentimentScore: 0.75,
-      callSummary: "Potential client requested information on luxury Class A Motorhomes. Showed particular interest in models with high-end amenities.",
-      actionsTaken: ["Provided details on luxury Class A models", "Scheduled showroom tour", "Sent virtual tour links"],
-      appointmentBooked: "2023-09-20 2:30 PM",
-      transcript: [
-        { speaker: "AI", text: "Welcome to our luxury RV division. How may I assist you today?" },
-        { speaker: "Caller", text: "Hello, I'm looking for information on your top-of-the-line Class A Motorhomes." },
-        { speaker: "AI", text: "Excellent! We have a range of luxury Class A Motorhomes with premium features. Are you interested in any specific amenities or size range?" },
-        { speaker: "Caller", text: "I'm looking for something with a full kitchen, entertainment system, and maybe even a washer/dryer unit." },
-        { speaker: "AI", text: "We have several models that meet those criteria. I'd be happy to schedule a showroom tour for you to see them in person. I can also send you links to virtual tours if you'd like to preview them." },
-        { speaker: "Caller", text: "That sounds great. Let's schedule a tour, and yes, please send me those virtual tour links." },
-      ]
-    },
-  ]
-
-  const filteredAndSortedData = useMemo(() => {
-    return sampleData
-      .filter(call => 
-        call.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        call.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        call.interestedIn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        call.phoneNumber.includes(searchTerm)
+  const filteredAndSortedLeads = useMemo(() => {
+    return leads
+      .filter((lead: Lead) => 
+        lead.name?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.use_case?.toString().toLowerCase().includes(searchTerm.toLowerCase())
       )
-      .sort((a, b) => {
-        const aValue = a[sortColumn];
-        const bValue = b[sortColumn];
-        
-        if (aValue === null || bValue === null) {
-          return 0; // Handle null values
+      .sort((a: Lead, b: Lead) => {
+        const aValue = a[sortColumn as keyof Lead]
+        const bValue = b[sortColumn as keyof Lead]
+        if (aValue && bValue) {
+          if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+          if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
         }
-        
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
+        return 0
       })
-  }, [sampleData, searchTerm, sortColumn, sortDirection])
+  }, [leads, searchTerm, sortColumn, sortDirection])
 
-  const handleSort = (column: keyof CallData) => {
+  const handleSort = (column: keyof Lead) => {
     if (column === sortColumn) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
     } else {
@@ -338,6 +306,9 @@ const RecentCalls = () => {
       setSortDirection('asc')
     }
   }
+
+  if (loading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
 
   return (
     <div className="container mx-auto p-4">
@@ -370,9 +341,9 @@ const RecentCalls = () => {
         />
       </div>
       {viewMode === 'card' ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredAndSortedData.map((call) => (
-            <CallDataCard key={call.id} data={call} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredAndSortedLeads.map((lead: Lead) => (
+            <CallDataCard key={lead.id} data={lead} />
           ))}
         </div>
       ) : (
@@ -383,7 +354,7 @@ const RecentCalls = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center">Phone Number</DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('phoneNumber')}>Sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('phone_number')}>Sort</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableHead>
@@ -391,8 +362,15 @@ const RecentCalls = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center">Name</DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('firstName')}>Sort by First Name</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSort('lastName')}>Sort by Last Name</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('name')}>Sort</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableHead>
+              <TableHead>
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex items-center">Email</DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleSort('email')}>Sort</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableHead>
@@ -400,7 +378,7 @@ const RecentCalls = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center">Interested In</DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('interestedIn')}>Sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('use_case')}>Sort</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableHead>
@@ -408,7 +386,7 @@ const RecentCalls = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex items-center">Sentiment</DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('sentimentScore')}>Sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('analysis.sentiment_score' as keyof Lead)}>Sort</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableHead>
@@ -417,22 +395,17 @@ const RecentCalls = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedData.map((call) => (
-              <TableRow key={call.id}>
-                <TableCell>{call.phoneNumber}</TableCell>
-                <TableCell>{call.firstName} {call.lastName}</TableCell>
-                <TableCell>{call.interestedIn}</TableCell>
-                <TableCell>
-                  <div className="flex items-center">
-                    <SentimentIcon score={call.sentimentScore} />
-                    <span className="ml-2">{(call.sentimentScore * 100).toFixed(0)}%</span>
-                  </div>
-                </TableCell>
-                <TableCell>{call.callSummary}</TableCell>
+            {filteredAndSortedLeads.map((lead) => (
+              <TableRow key={lead.id}>
+                <TableCell>{lead.phone_number}</TableCell>
+                <TableCell>{lead.name}</TableCell>
+                <TableCell>{lead.email}</TableCell>
+                <TableCell>{lead.use_case}</TableCell>
+                <TableCell>{lead.analysis?.summary || 'N/A'}</TableCell>
                 <TableCell>
                   <div className="flex space-x-2">
-                    <CallDetailsModal data={call} />
-                    <TranscriptModal transcript={call.transcript} />
+                    <CallDetailsModal data={lead as Lead} />
+                    <TranscriptModal transcriptData={lead.call_transcript} />
                   </div>
                 </TableCell>
               </TableRow>
@@ -445,21 +418,30 @@ const RecentCalls = () => {
 }
 
 const Dashboard = () => {
-  const totalCalls = 1000
-  const averageDuration = "3m 45s"
-  const voicemailCalls = 150
-  const answeredCalls = 800
-  const transferredCalls = 50
-  const overallSentiment = 0.75
-  const appointmentsBooked = 25
+  const { leads, loading, error } = useLeadsData()
+
+  if (loading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+  const totalCalls = leads.length
+  const averageDuration = calculateAverageDuration(leads as Lead[])
+  const voicemailCalls = leads.filter(lead => lead.call_status === 'voicemail').length
+  const answeredCalls = leads.filter(lead => lead.call_status === 'answered').length
+  const transferredCalls = leads.filter(lead => lead.call_status === 'transferred').length
+  const appointmentsBooked = leads.filter(lead => lead.analysis?.appointment_booked !== undefined).length
 
   const calculatePercentage = (value: number) => ((value / totalCalls) * 100).toFixed(1)
-
-  const upcomingAppointments: Appointment[] = [
-    { id: '1', date: '2023-09-15', time: '10:00 AM', firstName: 'John', lastName: 'Doe', interestedIn: 'Travel Trailer', phoneNumber: '+1 (555) 123-4567' },
-    { id: '2', date: '2023-09-20', time: '2:30 PM', firstName: 'Alice', lastName: 'Johnson', interestedIn: 'Fifth Wheel', phoneNumber: '+1 (555) 246-8135' },
-    { id: '3', date: '2023-09-22', time: '11:00 AM', firstName: 'Bob', lastName: 'Smith', interestedIn: 'Class A Motorhome', phoneNumber: '+1 (555) 987-6543' },
-  ]
+  const upcomingAppointments = leads
+    .filter(lead => lead.analysis?.appointment_booked) // Ensure this line is correct
+    .map(lead => ({
+      id: lead.id,
+      date: lead.analysis?.appointment_date || 'N/A', // Provide a default value if undefined
+      time: lead.analysis?.appointment_time || 'N/A', // Provide a default value if undefined
+      firstName: lead.name.split(' ')[0],
+      lastName: lead.name.split(' ')[1] || '',
+      interestedIn: lead.use_case,
+      phoneNumber: lead.phone_number
+    }))
+    .slice(0, 5); // Show only the next 5 appointments
 
   return (
     <div className="container mx-auto p-4">
@@ -479,9 +461,9 @@ const Dashboard = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Average Duration
+              Overall Call Duration // Updated title to reflect the change
             </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            {/* <BarChart className="h-4 w-4 text-muted-foreground" /> // Removed sentiment-related chart */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{averageDuration}</div>
@@ -527,23 +509,6 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground">
               {calculatePercentage(transferredCalls)}% of total calls
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Overall Sentiment Score
-            </CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{(overallSentiment * 100).toFixed(1)}%</div>
-            <div className="flex items-center mt-2">
-              <SentimentIcon score={overallSentiment} />
-              <span className="ml-2 text-sm text-muted-foreground">
-                {overallSentiment > 0.66 ? "Positive" : overallSentiment > 0.33 ? "Neutral" : "Negative"}
-              </span>
-            </div>
           </CardContent>
         </Card>
         <Card>
