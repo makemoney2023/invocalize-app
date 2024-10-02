@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useLeadsData } from '@/hooks/useLeadsData'
+import { useLeadsData, Lead } from '@/hooks/useLeadsData'
 import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
 
 interface CallData {
@@ -65,24 +65,6 @@ interface Appointment {
   lastName: string
   interestedIn: string
   phoneNumber: string
-}
-
-interface Lead {
-  call_transcript: any
-  email: ReactNode
-  phone_number: ReactNode
-  name: ReactNode
-  id: Key | null | undefined
-  call_duration: number;
-  created_at: string; // Add this line
-  // ... other properties ...
-  analysis?: {
-    appointment: any
-    sentiment_score: number;
-    summary?: string;
-  };
-  use_case: string;
-  call_status: string;
 }
 
 enum CallStatus {
