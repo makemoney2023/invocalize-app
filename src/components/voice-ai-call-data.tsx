@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useMemo, Key, ReactNode, Suspense } from 'react'
-import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail, CheckCircle, DollarSign } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useLeadsData, Lead } from '@/hooks/useLeadsData'
+import { useLeadsData } from '@/hooks/useLeadsData'
 import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
 
 interface CallData {
@@ -65,6 +65,28 @@ interface Appointment {
   lastName: string
   interestedIn: string
   phoneNumber: string
+}
+
+interface Lead {
+  summary: ReactNode
+  call_transcript: any
+  email: ReactNode
+  phone_number: ReactNode
+  name: ReactNode
+  id: Key | null | undefined
+  call_duration: number;
+  created_at: string; // Add this line
+  // ... other properties ...
+  analysis?: {
+    appointment: any
+    sentiment_score: number;
+    summary?: string;
+  };
+  use_case: string;
+  call_status: string;
+  completed: boolean;
+  price: number;
+  answered_by: string;
 }
 
 enum CallStatus {
@@ -409,13 +431,14 @@ const RecentCalls = () => {
 const Dashboard = () => {
   const { leads, loading, error } = useLeadsData()
   if (loading) return <div>Loading...</div>
-  if (error) return <div>Error: {error}</div> // Assuming error is a string
+  if (error) return <div>Error: {error}</div>
+
   const totalCalls = leads.length
   const averageDuration = calculateAverageDuration(leads)
-  const voicemailCalls = leads.filter(lead => lead.call_status === 'voicemail').length
-  const answeredCalls = leads.filter(lead => lead.call_status === 'completed').length
-  const transferredCalls = leads.filter(lead => lead.call_status === 'transferred').length
-  const appointmentsBooked = leads.filter(lead => lead.analysis?.appointment_booked !== undefined).length
+  const completedCalls = leads.filter(lead => lead.completed).length
+  const averagePrice = leads.reduce((sum, lead) => sum + lead.price, 0) / totalCalls
+  const humanAnsweredCalls = leads.filter(lead => lead.answered_by === 'human').length
+  const voicemailCalls = leads.filter(lead => lead.answered_by === 'voicemail').length
 
   const calculatePercentage = (value: number) => ((value / totalCalls) * 100).toFixed(1)
   const upcomingAppointments = leads
@@ -432,111 +455,46 @@ const Dashboard = () => {
     .slice(0, 5); // Show only the next 5 appointments
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Calls Received
-            </CardTitle>
-            <Phone className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalCalls}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Overall Call Duration // Updated title to reflect the change
-            </CardTitle>
-            {/* <BarChart className="h-4 w-4 text-muted-foreground" /> // Removed sentiment-related chart */}
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{averageDuration}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Voicemail
-            </CardTitle>
-            <Voicemail className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{voicemailCalls}</div>
-            <p className="text-xs text-muted-foreground">
-              {calculatePercentage(voicemailCalls)}% of total calls
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Completed Calls
-            </CardTitle>
-            <Phone className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{answeredCalls}</div>
-            <p className="text-xs text-muted-foreground">
-              {calculatePercentage(answeredCalls)}% of total calls
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Transferred
-            </CardTitle>
-            <PhoneForwarded className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{transferredCalls}</div>
-            <p className="text-xs text-muted-foreground">
-              {calculatePercentage(transferredCalls)}% of total calls
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Appointments Booked
-            </CardTitle>
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{appointmentsBooked}</div>
-            <p className="text-xs text-muted-foreground">
-              {calculatePercentage(appointmentsBooked)}% of total calls
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-      <h2 className="text-xl font-semibold mt-8 mb-4">Upcoming Appointments</h2>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Interested In</TableHead>
-            <TableHead>Phone Number</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {upcomingAppointments.map((appointment) => (
-            <TableRow key={appointment.id}>
-              <TableCell>{appointment.date}</TableCell>
-              <TableCell>{appointment.time}</TableCell>
-              <TableCell>{appointment.firstName} {appointment.lastName}</TableCell>
-              <TableCell>{appointment.interestedIn}</TableCell>
-              <TableCell>{appointment.phoneNumber}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
+          <Phone className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{totalCalls}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Completed Calls</CardTitle>
+          <CheckCircle className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{completedCalls}</div>
+          <p className="text-xs text-muted-foreground">
+            {calculatePercentage(completedCalls)}% of total calls
+          </p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Average Duration</CardTitle>
+          <Clock className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{averageDuration.toFixed(2)} min</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Average Cost</CardTitle>
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">${averagePrice.toFixed(2)}</div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -739,6 +697,41 @@ const CalendarPage = () => {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+const CallCard = ({ lead }: { lead: Lead }) => {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{lead.name}</CardTitle>
+        <CardDescription>{lead.phone_number}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <p className="text-sm font-medium">Status</p>
+            <p className="text-sm">{lead.completed ? 'Completed' : 'Incomplete'}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Duration</p>
+            <p className="text-sm">{lead.call_duration.toFixed(2)} min</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Answered By</p>
+            <p className="text-sm">{lead.answered_by}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium">Cost</p>
+            <p className="text-sm">${lead.price.toFixed(2)}</p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <p className="text-sm font-medium">Summary</p>
+          <p className="text-sm">{lead.summary}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
