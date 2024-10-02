@@ -82,6 +82,7 @@ interface Lead {
     summary?: string;
   };
   use_case: string;
+  call_status: string;
 }
 
 enum CallStatus {
@@ -430,7 +431,7 @@ const Dashboard = () => {
   const totalCalls = leads.length
   const averageDuration = calculateAverageDuration(leads)
   const voicemailCalls = leads.filter(lead => lead.call_status === 'voicemail').length
-  const answeredCalls = leads.filter(lead => lead.call_status === 'answered').length
+  const answeredCalls = leads.filter(lead => lead.call_status === 'completed').length
   const transferredCalls = leads.filter(lead => lead.call_status === 'transferred').length
   const appointmentsBooked = leads.filter(lead => lead.analysis?.appointment_booked !== undefined).length
 
@@ -491,7 +492,7 @@ const Dashboard = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Answered
+              Completed Calls
             </CardTitle>
             <Phone className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
