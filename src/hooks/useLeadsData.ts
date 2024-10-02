@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchLeads } from '@/api/leads'
 
 export interface Lead {
+  analysis: any;
   id: string;
   call_id: string;
   name: string;
@@ -40,7 +41,11 @@ export function useLeadsData() {
       const leadsData = await fetchLeads();
       setLeads(leadsData);
     } catch (error) {
-      setError(error.message);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('An unknown error occurred');
+      }
     } finally {
       setLoading(false);
     }

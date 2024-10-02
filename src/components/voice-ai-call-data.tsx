@@ -74,11 +74,12 @@ interface Lead {
   name: ReactNode
   id: Key | null | undefined
   call_duration: number;
+  created_at: string; // Add this line
   // ... other properties ...
   analysis?: {
     appointment: any
     sentiment_score: number;
-    summary?: string; // Add this line
+    summary?: string;
   };
   use_case: string;
 }
@@ -310,9 +311,8 @@ const RecentCalls = () => {
       setSortDirection('asc')
     }
   }
-
   if (loading) return <div>Loading...</div>
-  if (error) return <div>Error: {error.message}</div>
+  if (error) return <div>Error: {error}</div>
 
   return (
     <div className="container mx-auto p-4">
@@ -405,10 +405,10 @@ const RecentCalls = () => {
                 <TableCell>{lead.name}</TableCell>
                 <TableCell>{lead.email}</TableCell>
                 <TableCell>{lead.use_case}</TableCell>
-                <TableCell>{lead.analysis?.summary || 'N/A'}</TableCell>
+                <TableCell>{lead.analysis?.summary ?? 'N/A'}</TableCell>
                 <TableCell>
                   <div className="flex space-x-2">
-                    <CallDetailsModal data={lead as Lead} />
+                    <CallDetailsModal data={lead} />
                     <TranscriptModal transcriptData={lead.call_transcript} />
                   </div>
                 </TableCell>
@@ -423,11 +423,10 @@ const RecentCalls = () => {
 
 const Dashboard = () => {
   const { leads, loading, error } = useLeadsData()
-
   if (loading) return <div>Loading...</div>
-  if (error) return <div>Error: {error.message}</div>
+  if (error) return <div>Error: {error}</div> // Assuming error is a string
   const totalCalls = leads.length
-  const averageDuration = calculateAverageDuration(leads as Lead[])
+  const averageDuration = calculateAverageDuration(leads)
   const voicemailCalls = leads.filter(lead => lead.call_status === 'voicemail').length
   const answeredCalls = leads.filter(lead => lead.call_status === 'answered').length
   const transferredCalls = leads.filter(lead => lead.call_status === 'transferred').length
