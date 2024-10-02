@@ -132,7 +132,10 @@ const FullTranscript = ({ transcript }: { transcript: string }) => {
 };
 
 const MessageList = ({ messages }: { messages?: Array<{
-    id: Key | null | undefined user: string; text: string; created_at: string 
+  id: Key | null | undefined;
+  user: string;
+  text: string;
+  created_at: string;
 }> }) => {
   // Provide a default value if messages is undefined
   const safeMessages = messages || []
