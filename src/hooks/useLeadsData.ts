@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchLeads } from '@/api/leads'
+import { sendCallSummaryEmail } from '@/utils/sendemail';
 
 export interface Lead {
   id: string;
@@ -10,44 +11,35 @@ export interface Lead {
   company: string;
   role: string;
   use_case: string;
-  created_at: string;
   call_id: string;
-  call_duration: number; // Keep this for compatibility
-  call_length: number; // New property from Bland API
+  call_status: string;
+  call_length: number;
   batch_id: string | null;
-  to: string;
-  from: string;
-  request_data: {
-    phone_number: string;
-    wait: boolean;
-    language: string;
-  };
+  to_number: string;
+  from_number: string;
+  request_data: string;
   completed: boolean;
   inbound: boolean;
   queue_status: string;
   endpoint_url: string;
   max_duration: number;
   error_message: string | null;
-  variables: {
-    now: string;
-    now_utc: string;
-    short_from: string;
-    short_to: string;
-    from: string;
-    to: string;
-    call_id: string;
-    phone_number: string;
-    city: string;
-    country: string;
-    state: string;
-    zip: string;
-    input: Record<string, any>;
+  variables?: {
+    city?: string;
+    [key: string]: any;
   };
   answered_by: string;
   record: boolean;
   recording_url: string | null;
   c_id: string;
-  metadata: Record<string, any>;
+  metadata: {
+    name: string;
+    role: string;
+    email: string;
+    leadId: string;
+    company: string;
+    useCase: string;
+  };
   summary: string;
   price: number;
   started_at: string;
@@ -55,28 +47,29 @@ export interface Lead {
   call_ended_by: string;
   pathway_logs: any;
   analysis_schema: any;
-  analysis: {
-    appointment: any;
-    sentiment_score: number;
-    summary?: string;
-    appointment_booked?: boolean;
-    appointment_date?: string;
-    appointment_time?: string;
-  };
-  concatenated_transcript: string;
+  corrected_duration: number;
+  end_at: string;
   call_transcript: Array<{
     id: number;
-    created_at: string;
     text: string;
     user: string;
-    c_id: string;
-    status: string | null;
-    transcript_id: string | null;
-  }>;
-  status: string;
-  corrected_duration: string;
-  end_at: string;
-  call_status: string; // Keep this for compatibility
+    created_at: string;
+  }> | [];
+  concatenated_transcript: string;
+  analysis: {
+    appointment: any;
+    appointment_date?: string;
+    appointment_time?: string;
+    appointment_booked?: boolean;
+    sentiment_score?: number;
+    summary?: string;
+    topics?: string[];
+    action_items?: string[];
+    questions?: string[];
+  };
+  pathway: any;
+  created_at: string;
+  updated_at: string;
 }
 
 export function useLeadsData() {
@@ -112,8 +105,63 @@ export function useLeadsData() {
     }
   }
 
-  function handleLeadChange(payload: any) {
-    // Handle lead changes
+  async function handleLeadChange(payload: any) {
+    console.log('Lead change detected:', payload);
+
+    if (payload.eventType === 'UPDATE' && payload.new.completed && !payload.old.completed) {
+      console.log('Call completed, sending email for lead:', payload.new.id);
+      try {
+        const response = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload.new),
+        });
+        if (!response.ok) {
+          throw new Error('Failed to send email');
+        }
+        console.log('Email sent successfully for lead:', payload.new.id);
+      } catch (error) {
+        console.error('Error sending email:', error);
+      }
+    }
+
+    // Refresh leads data
+    await fetchLeadsData();
+  }
+
+  async function fetchAndUpdateAnalysis(leadId: string) {
+    try {
+      const response = await fetch(`https://api.bland.ai/v1/calls/${leadId}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_BLAND_AI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analysis');
+      }
+
+      const analysisData = await response.json();
+
+      // Update the lead in the database with the new analysis data
+      const { error } = await supabase
+        .from('leads')
+        .update({ analysis: analysisData })
+        .eq('id', leadId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Refresh the leads data
+      await fetchLeadsData();
+    } catch (error) {
+      console.error('Error fetching and updating analysis:', error);
+    }
   }
 
   return { leads, loading, error }

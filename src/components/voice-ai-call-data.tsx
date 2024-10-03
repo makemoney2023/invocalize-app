@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, Key, ReactNode, Suspense } from 'react'
+import { useState, useMemo, Key, ReactNode, Suspense, AwaitedReactNode, JSXElementConstructor, ReactElement, ReactPortal, SetStateAction } from 'react'
 import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail, CheckCircle, DollarSign } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,6 +44,14 @@ import {
 import { useLeadsData } from '@/hooks/useLeadsData'
 import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
 
+// Import the Lead type from your hook
+import { Lead } from '../hooks/useLeadsData'
+
+// If you need to extend the Lead type, do it like this:
+type ExtendedLead = Lead & {
+  // Add any additional properties here if needed
+};
+
 interface CallData {
   id: string
   phoneNumber: string
@@ -65,31 +73,6 @@ interface Appointment {
   lastName: string
   interestedIn: string
   phoneNumber: string
-}
-
-interface Lead {
-  summary: ReactNode
-  call_transcript: any
-  email: ReactNode
-  phone_number: ReactNode
-  name: ReactNode
-  id: Key | null | undefined
-  call_duration: number;
-  created_at: string; // Add this line
-  // ... other properties ...
-  analysis?: {
-    appointment: any
-    sentiment_score: number;
-    summary?: string;
-  };
-  use_case: string;
-  call_status: string;
-  completed: boolean;
-  price: number;
-  answered_by: string;
-  variables?: {
-    city?: string;
-  };
 }
 
 enum CallStatus {
@@ -221,6 +204,15 @@ const CallDataCard = ({ data }: { data: Lead }) => {
             {data.analysis?.summary ?? 'N/A'}
           </p>
         </div>
+        {data.analysis && (
+          <div className="mt-2">
+            <h4 className="text-sm font-medium mb-1">Analysis Highlights</h4>
+            <p className="text-sm text-muted-foreground">
+              Sentiment: {data.analysis.sentiment_score?.toFixed(2) || 'N/A'} | 
+              Topics: {data.analysis.topics?.slice(0, 3).join(', ') || 'N/A'}
+            </p>
+          </div>
+        )}
         <Suspense fallback={<div>Loading...</div>}>
           <TranscriptModal transcriptData={data.call_transcript ?? []} />
         </Suspense>
@@ -229,60 +221,72 @@ const CallDataCard = ({ data }: { data: Lead }) => {
   )
 }
 
-const CallDetailsModal = ({ data }: { data: Lead }) => {
+const CallDetailsModal = ({ lead }: { lead: Lead }) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">View Details</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
-            {data.name}
+            Call Details: {lead.name}
           </DialogTitle>
         </DialogHeader>
         <div className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center">
-              <Phone className="w-4 h-4 mr-2" />
-              <span className="text-sm">{data.phone_number}</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-medium">Phone Number</h4>
+              <p>{lead.phone_number}</p>
             </div>
-            <div className="flex items-center">
-              <Mail className="w-4 h-4 mr-2" />
-              <span className="text-sm">{data.email}</span>
+            <div>
+              <h4 className="text-sm font-medium">Email</h4>
+              <p>{lead.email}</p>
             </div>
-            <div className="flex items-center">
-              <RVTypeIcon type={data.use_case} />
-              <span className="text-sm">{data.use_case}</span>
+            <div>
+              <h4 className="text-sm font-medium">Company</h4>
+              <p>{lead.company}</p>
             </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <span className="text-sm font-medium mr-2">Sentiment Score:</span>
-              <SentimentIcon score={data.analysis?.sentiment_score || 0} />
+            <div>
+              <h4 className="text-sm font-medium">Role</h4>
+              <p>{lead.role}</p>
             </div>
-            <Badge variant={
-              data.analysis?.sentiment_score ? 
-                data.analysis.sentiment_score > 0.66 ? "default" :
-                data.analysis.sentiment_score > 0.33 ? "secondary" :
-                "destructive" : "destructive"
-            }>
-              {data.analysis?.sentiment_score ? `${(data.analysis.sentiment_score * 100).toFixed(0)}%` : 'N/A'}
-            </Badge>
-          </div>
-          <div className="flex items-center">
-            <CalendarIcon className="w-4 h-4 mr-2" />
-            <span className="text-sm">
-              {data.analysis?.appointment?.booked 
-                ? `Appointment: ${data.analysis.appointment.date} at ${data.analysis.appointment.time}` 
-                : 'No appointment booked'}
-            </span>
+            <div>
+              <h4 className="text-sm font-medium">Use Case</h4>
+              <p>{lead.use_case}</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">Call Status</h4>
+              <p>{lead.call_status}</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">Call Duration</h4>
+              <p>{lead.call_length ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">Call Type</h4>
+              <p>{lead.inbound ? 'Inbound' : 'Outbound'}</p>
+            </div>
           </div>
           <div>
-            <h4 className="text-sm font-medium mb-2">Call Summary</h4>
-            <p className="text-sm text-muted-foreground">{data.analysis?.summary || 'N/A'}</p>
+            <h4 className="text-sm font-medium">Summary</h4>
+            <p>{lead.summary}</p>
           </div>
-          <TranscriptModal transcriptData={data.call_transcript} />
+          <div>
+            <h4 className="text-sm font-medium">Transcript</h4>
+            <div className="max-h-60 overflow-y-auto bg-gray-100 p-2 rounded">
+              {lead.call_transcript && lead.call_transcript.length > 0 ? (
+                lead.call_transcript.map((entry, index) => (
+                  <div key={index} className="mb-2">
+                    <span className="font-bold">{entry.user}: </span>
+                    <span>{entry.text}</span>
+                  </div>
+                ))
+              ) : (
+                <p>No transcript available</p>
+              )}
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -293,25 +297,26 @@ const RecentCalls = () => {
   const { leads, loading, error } = useLeadsData()
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<keyof Lead>(() => 'created_at')
+  const [sortColumn, setSortColumn] = useState<keyof Lead>('created_at')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   const filteredAndSortedLeads = useMemo(() => {
     return leads
       .filter((lead: Lead) => 
-        lead.name?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.use_case?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.use_case.toLowerCase().includes(searchTerm.toLowerCase())
       )
       .sort((a: Lead, b: Lead) => {
-        const aValue = a[sortColumn as keyof Lead]
-        const bValue = b[sortColumn as keyof Lead]
-        if (aValue && bValue) {
-          if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
-          if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+        const aValue = a[sortColumn as keyof Lead];
+        const bValue = b[sortColumn as keyof Lead];
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
         }
-        return 0
-      })
-  }, [leads, searchTerm, sortColumn, sortDirection])
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+  }, [leads, searchTerm, sortColumn, sortDirection]);
 
   const handleSort = (column: keyof Lead) => {
     if (column === sortColumn) {
@@ -321,6 +326,7 @@ const RecentCalls = () => {
       setSortDirection('asc')
     }
   }
+
   if (loading) return <div>Loading...</div>
   if (error) return <div>Error: {error}</div>
 
@@ -356,8 +362,8 @@ const RecentCalls = () => {
       </div>
       {viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredAndSortedLeads.map((lead: Lead) => (
-            <CallDataCard key={lead.id} data={lead} />
+          {filteredAndSortedLeads.map((lead: Lead, _index: number) => (
+            <CallCard key={lead.id} lead={lead} />
           ))}
         </div>
       ) : (
@@ -365,62 +371,33 @@ const RecentCalls = () => {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[100px]">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center">Phone Number</DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('phone_number')}>Sort</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="ghost" onClick={() => handleSort('phone_number')}>Phone Number</Button>
               </TableHead>
               <TableHead>
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center">Name</DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('name')}>Sort</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="ghost" onClick={() => handleSort('name')}>Name</Button>
               </TableHead>
               <TableHead>
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center">Email</DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('email')}>Sort</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="ghost" onClick={() => handleSort('use_case')}>Use Case</Button>
               </TableHead>
               <TableHead>
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center">Interested In</DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('use_case')}>Sort</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="ghost" onClick={() => handleSort('call_status')}>Status</Button>
               </TableHead>
               <TableHead>
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex items-center">Sentiment</DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('analysis.sentiment_score' as keyof Lead)}>Sort</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button variant="ghost" onClick={() => handleSort('call_length')}>Duration</Button>
               </TableHead>
-              <TableHead>Summary</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedLeads.map((lead) => (
+            {filteredAndSortedLeads.map((lead: Lead, index: number) => (
               <TableRow key={lead.id}>
                 <TableCell>{lead.phone_number}</TableCell>
                 <TableCell>{lead.name}</TableCell>
-                <TableCell>{lead.email}</TableCell>
                 <TableCell>{lead.use_case}</TableCell>
-                <TableCell>{lead.analysis?.summary ?? 'N/A'}</TableCell>
+                <TableCell>{lead.call_status}</TableCell>
+                <TableCell>{lead.call_length ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</TableCell>
                 <TableCell>
-                  <div className="flex space-x-2">
-                    <CallDetailsModal data={lead} />
-                    <TranscriptModal transcriptData={lead.call_transcript} />
-                  </div>
+                  <CallDetailsModal lead={lead} />
                 </TableCell>
               </TableRow>
             ))}
@@ -437,29 +414,11 @@ const Dashboard = () => {
   if (error) return <div>Error: {error}</div>
 
   const totalCalls = leads.length
-  const averageDuration = calculateAverageDuration(leads)
   const completedCalls = leads.filter(lead => lead.completed).length
-  const averagePrice = leads.reduce((sum, lead) => sum + lead.price, 0) / totalCalls
+  const averageDuration = calculateAverageDuration(leads)
+  const totalRevenue = leads.reduce((sum, lead) => sum + lead.price, 0)
   const inboundCalls = leads.filter(lead => lead.inbound).length
   const outboundCalls = totalCalls - inboundCalls
-  const errorRate = (leads.filter(lead => lead.error_message !== null).length / totalCalls) * 100
-
-  const sentimentDistribution = leads.reduce((acc, lead) => {
-    const score = lead.analysis?.sentiment_score || 0;
-    if (score > 0.66) acc.positive++;
-    else if (score > 0.33) acc.neutral++;
-    else acc.negative++;
-    return acc;
-  }, { positive: 0, neutral: 0, negative: 0 });
-
-  const callDurationDistribution = leads.reduce((acc, lead) => {
-    const duration = lead.call_length;
-    if (duration <= 1) acc['0-1']++;
-    else if (duration <= 3) acc['1-3']++;
-    else if (duration <= 5) acc['3-5']++;
-    else acc['5+']++;
-    return acc;
-  }, { '0-1': 0, '1-3': 0, '3-5': 0, '5+': 0 });
 
   const topUseCases = leads.reduce((acc, lead) => {
     acc[lead.use_case] = (acc[lead.use_case] || 0) + 1;
@@ -469,8 +428,6 @@ const Dashboard = () => {
   const sortedUseCases = Object.entries(topUseCases)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
-
-  const appointmentsBooked = leads.filter(lead => lead.analysis?.appointment_booked).length;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -484,6 +441,14 @@ const Dashboard = () => {
       </Card>
       <Card>
         <CardHeader>
+          <CardTitle>Completed Calls</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{completedCalls}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle>Average Duration</CardTitle>
         </CardHeader>
         <CardContent>
@@ -492,10 +457,10 @@ const Dashboard = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Average Price</CardTitle>
+          <CardTitle>Total Revenue</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${averagePrice.toFixed(2)}</div>
+          <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
         </CardContent>
       </Card>
       <Card>
@@ -517,31 +482,17 @@ const Dashboard = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Error Rate</CardTitle>
+          <CardTitle>Top Use Cases</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{errorRate.toFixed(2)}%</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Sentiment Distribution</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-between">
-            <div>
-              <div className="text-sm">Positive</div>
-              <div className="text-lg font-bold">{sentimentDistribution.positive}</div>
-            </div>
-            <div>
-              <div className="text-sm">Neutral</div>
-              <div className="text-lg font-bold">{sentimentDistribution.neutral}</div>
-            </div>
-            <div>
-              <div className="text-sm">Negative</div>
-              <div className="text-lg font-bold">{sentimentDistribution.negative}</div>
-            </div>
-          </div>
+          <ul className="space-y-2">
+            {sortedUseCases.map(([useCase, count]) => (
+              <li key={useCase} className="flex justify-between">
+                <span>{useCase}</span>
+                <span className="font-bold">{count}</span>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
     </div>
@@ -549,27 +500,19 @@ const Dashboard = () => {
 }
 
 const CalendarPage = () => {
+  const { leads } = useLeadsData()
+
+  const appointments = leads.filter(lead => lead.analysis?.appointment_booked)
+
   const [view, setView] = useState<'day' | 'week' | 'month'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
-
-  const appointments: Appointment[] = [
-    { id: '1', date: '2023-09-15', time: '10:00 AM', firstName: 'John', lastName: 'Doe', interestedIn: 'Travel Trailer', phoneNumber: '+1 (555) 123-4567' },
-    { id: '2', date: '2023-09-20', time: '2:30 PM', firstName: 'Alice', lastName: 'Johnson', interestedIn: 'Fifth Wheel', phoneNumber: '+1 (555) 246-8135' },
-    { id: '3', date: '2023-09-22', time: '11:00 AM', firstName: 'Bob', lastName: 'Smith', interestedIn: 'Class A Motorhome', phoneNumber: '+1 (555) 987-6543' },
-  ]
-
-  const daysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
-  }
-
-  const firstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
-  }
+  const [selectedAppointment, setSelectedAppointment] = useState<Lead | null>(null)
 
   const renderDayView = () => {
-    const dayAppointments = appointments.filter(app => app.date === currentDate.toISOString().split('T')[0])
+    const dayAppointments = appointments.filter(app => 
+      new Date(app.analysis.appointment_date!).toDateString() === currentDate.toDateString()
+    )
     return (
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b">
@@ -577,10 +520,10 @@ const CalendarPage = () => {
         </div>
         <div className="divide-y">
           {dayAppointments.map(app => (
-            <div key={app.id} className="p-4 hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedAppointment(app)}>
-              <p className="font-semibold">{app.time}</p>
-              <p>{app.firstName} {app.lastName}</p>
-              <p className="text-sm text-gray-500">{app.interestedIn}</p>
+            <div key={app.id} className="p-4 hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedAppointment(app as unknown as Lead)}>
+              <p className="font-semibold">{app.analysis?.appointment_time}</p>
+              <p>{app.name}</p>
+              <p className="text-sm text-gray-500">{app.use_case}</p>
             </div>
           ))}
         </div>
@@ -605,10 +548,10 @@ const CalendarPage = () => {
               <h3 className="text-sm font-semibold">{day.toLocaleDateString('en-US', { weekday: 'short' })}</h3>
               <p className="text-xs text-gray-500">{day.getDate()}</p>
               {appointments
-                .filter(app => app.date === day.toISOString().split('T')[0])
+                .filter(app => app.analysis?.appointment_date && new Date(app.analysis.appointment_date).toDateString() === day.toDateString())
                 .map(app => (
-                  <div key={app.id} className="mt-1 p-1 bg-blue-100 rounded text-xs cursor-pointer" onClick={() => setSelectedAppointment(app)}>
-                    {app.time} - {app.firstName} {app.lastName}
+                  <div key={app.id} className="mt-1 p-1 bg-blue-100 rounded text-xs cursor-pointer" onClick={() => setSelectedAppointment(app as unknown as Lead)}>
+                    {app.analysis?.appointment_time ? `${app.analysis.appointment_time} - ${app.name}` : `${app.name}`}
                   </div>
                 ))
               }
@@ -620,12 +563,12 @@ const CalendarPage = () => {
   }
 
   const renderMonthView = () => {
-    const days = daysInMonth(currentDate)
-    const firstDay = firstDayOfMonth(currentDate)
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
     const cells = Array(35).fill(null)
 
-    for (let i = 0; i < days; i++) {
-      cells[i + firstDay] = i + 1
+    for (let i = 0; i < daysInMonth; i++) {
+      cells[i + firstDayOfMonth] = i + 1
     }
 
     return (
@@ -645,7 +588,7 @@ const CalendarPage = () => {
                   <p className={`text-sm ${selectedDate?.getDate() === day ? 'font-bold' : ''}`}>{day}</p>
                   {appointments
                     .filter(app => {
-                      const appDate = new Date(app.date)
+                      const appDate = new Date(app.analysis.appointment_date!)
                       return appDate.getFullYear() === currentDate.getFullYear() &&
                              appDate.getMonth() === currentDate.getMonth() &&
                              appDate.getDate() === day
@@ -656,10 +599,10 @@ const CalendarPage = () => {
                         className="mt-1 p-1 bg-blue-100 rounded text-xs cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setSelectedAppointment(app)
+                          setSelectedAppointment(app as unknown as SetStateAction<Lead | null>)
                         }}
                       >
-                        {app.time} - {app.firstName} {app.lastName}
+                        {app.analysis?.appointment_time ? app.analysis.appointment_time : 'No appointment time'} - {app.name}
                       </div>
                     ))
                   }
@@ -727,19 +670,19 @@ const CalendarPage = () => {
             <div className="mt-4 space-y-4">
               <div>
                 <h4 className="text-sm font-medium">Date and Time</h4>
-                <p>{selectedAppointment.date} at {selectedAppointment.time}</p>
+                <p>{selectedAppointment?.analysis?.appointment?.date} at {selectedAppointment?.analysis?.appointment?.time}</p>
               </div>
               <div>
                 <h4 className="text-sm font-medium">Client</h4>
-                <p>{selectedAppointment.firstName} {selectedAppointment.lastName}</p>
+                <p>{selectedAppointment?.name}</p>
               </div>
               <div>
-                <h4 className="text-sm font-medium">Interested In</h4>
-                <p>{selectedAppointment.interestedIn}</p>
+                <h4 className="text-sm font-medium">Use Case</h4>
+                <p>{selectedAppointment.use_case}</p>
               </div>
               <div>
                 <h4 className="text-sm font-medium">Phone Number</h4>
-                <p>{selectedAppointment.phoneNumber}</p>
+                <p>{selectedAppointment.phone_number}</p>
               </div>
             </div>
           )}
@@ -750,65 +693,112 @@ const CalendarPage = () => {
 }
 
 const CallCard = ({ lead }: { lead: Lead }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <Card className="mb-4">
-      <CardHeader>
+    <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg">
+      <CardHeader className="pb-2">
         <div className="flex justify-between items-center">
-          <CardTitle>{lead.name}</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsExpanded(!isExpanded)}>
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
+          <CardTitle className="text-xl font-bold">{lead.name}</CardTitle>
+          <Badge variant={lead.completed ? "success" : "secondary"}>
+            {lead.completed ? "Completed" : "Incomplete"}
+          </Badge>
         </div>
-        <CardDescription>{lead.phone_number}</CardDescription>
+        <CardDescription className="flex items-center text-sm text-muted-foreground">
+          <Phone className="w-4 h-4 mr-2" />
+          {lead.phone_number}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <div>
-            <p className="text-sm font-medium">Status</p>
-            <p className="text-sm">{lead.completed ? 'Completed' : 'Incomplete'}</p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-muted-foreground">Duration</span>
+            <span className="text-lg">{lead.call_length ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</span>
           </div>
-          <div>
-            <p className="text-sm font-medium">Duration</p>
-            <p className="text-sm">{lead.call_duration.toFixed(2)} min</p>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-muted-foreground">Cost</span>
+            <span className="text-lg">{lead.price ? `$${lead.price.toFixed(2)}` : 'N/A'}</span>
           </div>
-          <div>
-            <p className="text-sm font-medium">Answered By</p>
-            <p className="text-sm">{lead.answered_by}</p>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-muted-foreground">Answered By</span>
+            <span className="text-lg">{lead.answered_by || 'N/A'}</span>
           </div>
-          <div>
-            <p className="text-sm font-medium">Cost</p>
-            <p className="text-sm">${lead.price.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-sm font-medium">City</p>
-            <p className="text-sm">{lead.variables?.city || 'N/A'}</p>
-          </div>
-          <div>
-            <p className="text-sm font-medium">Use Case</p>
-            <p className="text-sm">{lead.use_case}</p>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-muted-foreground">Use Case</span>
+            <span className="text-lg">{lead.use_case || 'N/A'}</span>
           </div>
         </div>
         <div className="mb-4">
-          <p className="text-sm font-medium">Summary</p>
-          <p className="text-sm">{lead.summary}</p>
+          <h4 className="text-sm font-medium text-muted-foreground mb-2">Summary</h4>
+          <p className="text-sm">{lead.summary || 'No summary available'}</p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full"
+        >
+          {isExpanded ? "Hide Details" : "Show Details"}
+          {isExpanded ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+        </Button>
         {isExpanded && (
-          <>
-            <div className="mb-4">
-              <p className="text-sm font-medium">Call Transcript</p>
-              <p className="text-sm">{lead.call_transcript}</p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Call Transcript</h4>
+              <div className="max-h-40 overflow-y-auto bg-muted/50 rounded-md p-2">
+                {lead.call_transcript && lead.call_transcript.length > 0 ? (
+                  lead.call_transcript.map((entry, index) => (
+                    <p key={index} className="text-sm mb-1">
+                      <strong>{entry.user}:</strong> {entry.text}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No transcript available</p>
+                )}
+              </div>
             </div>
-            <div className="mb-4">
-              <p className="text-sm font-medium">Sentiment Score</p>
-              <p className="text-sm">{lead.analysis?.sentiment_score || 'N/A'}</p>
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">Analysis</h4>
+              {lead.analysis ? (
+                <div className="space-y-2">
+                  <p><strong>Sentiment Score:</strong> {lead.analysis.sentiment_score?.toFixed(2) || 'N/A'}</p>
+                  <p><strong>Summary:</strong> {lead.analysis.summary || 'N/A'}</p>
+                  {lead.analysis.topics && (
+                    <div>
+                      <strong>Topics:</strong>
+                      <ul className="list-disc list-inside">
+                        {lead.analysis.topics.map((topic, index) => (
+                          <li key={index}>{topic}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {lead.analysis.action_items && (
+                    <div>
+                      <strong>Action Items:</strong>
+                      <ul className="list-disc list-inside">
+                        {lead.analysis.action_items.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {lead.analysis.questions && (
+                    <div>
+                      <strong>Questions:</strong>
+                      <ul className="list-disc list-inside">
+                        {lead.analysis.questions.map((question, index) => (
+                          <li key={index}>{question}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No analysis available</p>
+              )}
             </div>
-            <div className="mb-4">
-              <p className="text-sm font-medium">Appointment</p>
-              <p className="text-sm">{lead.analysis?.appointment?.booked ? 'Booked' : 'Not Booked'}</p>
-            </div>
-          </>
+          </div>
         )}
       </CardContent>
     </Card>
