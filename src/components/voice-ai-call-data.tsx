@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, Key, ReactNode, Suspense, AwaitedReactNode, JSXElementConstructor, ReactElement, ReactPortal, SetStateAction } from 'react'
-import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail, CheckCircle, DollarSign } from 'lucide-react'
+import { useState, useMemo, Key, ReactNode, Suspense, AwaitedReactNode, JSXElementConstructor, ReactElement, ReactPortal, SetStateAction, useEffect } from 'react'
+import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail, CheckCircle, DollarSign, Building } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -43,14 +43,21 @@ import {
 } from "@/components/ui/select"
 import { useLeadsData } from '@/hooks/useLeadsData'
 import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
+import GeographicalHeatMap from './GeographicalHeatMap'
+import DarkModeToggle from '@/components/DarkModeToggle'
 
-// Import the Lead type from your hook
-import { Lead } from '../hooks/useLeadsData'
+import { Lead } from '@/hooks/useLeadsData'
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { DialogFooter } from "@/components/ui/dialog"
+import { supabase } from '@/lib/supabase'
+import { fetchAppointments } from '@/api/leads'
+import { format, addDays, startOfMonth, endOfMonth, isSameMonth, addMonths, subMonths } from 'date-fns'
 
 // If you need to extend the Lead type, do it like this:
 type ExtendedLead = Lead & {
   // Add any additional properties here if needed
-};
+}
 
 interface CallData {
   id: string
@@ -69,10 +76,10 @@ interface Appointment {
   id: string
   date: string
   time: string
-  firstName: string
-  lastName: string
-  interestedIn: string
-  phoneNumber: string
+  name: string
+  use_case: string
+  phone_number: string
+  note?: string
 }
 
 enum CallStatus {
@@ -159,7 +166,7 @@ const TranscriptModal = ({ transcriptData }: { transcriptData: any }) => {
         <div className="space-y-4">
           <CallSummary summary={transcriptData.summary} />
           <FullTranscript transcript={transcriptData.concatenated_transcript} />
-          <MessageList messages={transcriptData.transcripts} /> {/* Ensure this is correct */}
+          <MessageList messages={transcriptData.transcripts} />
           <CallDuration duration={transcriptData.call_length} />
         </div>
       </DialogContent>
@@ -275,8 +282,8 @@ const CallDetailsModal = ({ lead }: { lead: Lead }) => {
           <div>
             <h4 className="text-sm font-medium">Transcript</h4>
             <div className="max-h-60 overflow-y-auto bg-gray-100 p-2 rounded">
-              {lead.call_transcript && lead.call_transcript.length > 0 ? (
-                lead.call_transcript.map((entry, index) => (
+              {Array.isArray(lead.transcripts) && lead.transcripts.length > 0 ? (
+                lead.transcripts.map((entry, index) => (
                   <div key={index} className="mb-2">
                     <span className="font-bold">{entry.user}: </span>
                     <span>{entry.text}</span>
@@ -297,7 +304,7 @@ const RecentCalls = () => {
   const { leads, loading, error } = useLeadsData()
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<keyof Lead>('created_at')
+  const [sortColumn, setSortColumn] = useState<string>('created_at')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
   const filteredAndSortedLeads = useMemo(() => {
@@ -307,25 +314,38 @@ const RecentCalls = () => {
         lead.use_case.toLowerCase().includes(searchTerm.toLowerCase())
       )
       .sort((a: Lead, b: Lead) => {
-        const aValue = a[sortColumn as keyof Lead];
-        const bValue = b[sortColumn as keyof Lead];
+        let aValue: any = a;
+        let bValue: any = b;
+
+        // Handle nested properties
+        sortColumn.split('.').forEach(key => {
+          aValue = aValue?.[key];
+          bValue = bValue?.[key];
+        });
+
+        if (aValue === undefined) aValue = null;
+        if (bValue === undefined) bValue = null;
+
+        if (aValue === bValue) return 0;
+        if (aValue === null) return 1;
+        if (bValue === null) return -1;
+
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return sortDirection === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
         }
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
+
+        return sortDirection === 'asc' ? (aValue < bValue ? -1 : 1) : (bValue < aValue ? -1 : 1);
       });
   }, [leads, searchTerm, sortColumn, sortDirection]);
 
-  const handleSort = (column: keyof Lead) => {
+  const handleSort = (column: string) => {
     if (column === sortColumn) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortColumn(column)
-      setSortDirection('asc')
+      setSortColumn(column);
+      setSortDirection('asc');
     }
-  }
+  };
 
   if (loading) return <div>Loading...</div>
   if (error) return <div>Error: {error}</div>
@@ -385,17 +405,34 @@ const RecentCalls = () => {
               <TableHead>
                 <Button variant="ghost" onClick={() => handleSort('call_length')}>Duration</Button>
               </TableHead>
+              <TableHead>
+                <Button variant="ghost" onClick={() => handleSort('analysis.sentiment_score')}>Sentiment</Button>
+              </TableHead>
+              <TableHead>Summary</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedLeads.map((lead: Lead, index: number) => (
+            {filteredAndSortedLeads.map((lead: Lead) => (
               <TableRow key={lead.id}>
                 <TableCell>{lead.phone_number}</TableCell>
                 <TableCell>{lead.name}</TableCell>
                 <TableCell>{lead.use_case}</TableCell>
                 <TableCell>{lead.call_status}</TableCell>
                 <TableCell>{lead.call_length ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</TableCell>
+                <TableCell>{lead.analysis?.sentiment_score ? `${(lead.analysis.sentiment_score * 100).toFixed(0)}%` : 'N/A'}</TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    onClick={() => {
+                      // Implement a modal or tooltip to show the full summary
+                      alert(lead.summary || 'No summary available');
+                    }}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                </TableCell>
                 <TableCell>
                   <CallDetailsModal lead={lead} />
                 </TableCell>
@@ -405,24 +442,24 @@ const RecentCalls = () => {
         </Table>
       )}
     </div>
-  )
+  );
 }
 
 const Dashboard = () => {
-  const { leads, loading, error } = useLeadsData()
-  if (loading) return <div>Loading...</div>
-  if (error) return <div>Error: {error}</div>
+  const { leads, loading, error } = useLeadsData();
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
 
-  const totalCalls = leads.length
-  const completedCalls = leads.filter(lead => lead.completed).length
-  const averageDuration = calculateAverageDuration(leads)
-  const totalRevenue = leads.reduce((sum, lead) => sum + lead.price, 0)
-  const inboundCalls = leads.filter(lead => lead.inbound).length
-  const outboundCalls = totalCalls - inboundCalls
+  const totalCalls = leads.length;
+  const completedCalls = leads.filter(lead => lead.completed).length;
+  const averageDuration = calculateAverageDuration(leads);
+  const totalRevenue = leads.reduce((sum, lead) => sum + lead.price, 0);
+  const inboundCalls = leads.filter(lead => lead.inbound).length;
+  const outboundCalls = totalCalls - inboundCalls;
 
   const topUseCases = leads.reduce((acc, lead) => {
     acc[lead.use_case] = (acc[lead.use_case] || 0) + 1;
-    return acc;
+    return acc as Record<string, number>
   }, {} as Record<string, number>);
 
   const sortedUseCases = Object.entries(topUseCases)
@@ -430,251 +467,201 @@ const Dashboard = () => {
     .slice(0, 5);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <Card>
-        <CardHeader>
-          <CardTitle>Total Calls</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{totalCalls}</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Completed Calls</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{completedCalls}</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Average Duration</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{averageDuration.toFixed(2)} min</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Total Revenue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Inbound vs Outbound</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-between">
-            <div>
-              <div className="text-lg font-semibold">Inbound</div>
-              <div className="text-2xl font-bold">{inboundCalls}</div>
-            </div>
-            <div>
-              <div className="text-lg font-semibold">Outbound</div>
-              <div className="text-2xl font-bold">{outboundCalls}</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Use Cases</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2">
-            {sortedUseCases.map(([useCase, count]) => (
-              <li key={useCase} className="flex justify-between">
-                <span>{useCase}</span>
-                <span className="font-bold">{count}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+    <div className="container mx-auto p-4 space-y-4">
+      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Calls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalCalls}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Completed Calls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{completedCalls}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Average Duration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{averageDuration.toFixed(2)} min</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">${totalRevenue.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Inbound Calls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{inboundCalls}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Outbound Calls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{outboundCalls}</div>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Use Cases</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {sortedUseCases.map(([useCase, count]) => (
+                <li key={useCase} className="flex justify-between">
+                  <span>{useCase}</span>
+                  <span className="font-bold">{count}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+        <Card className="h-[500px]">
+          <CardHeader>
+            <CardTitle>Geographical Heat Map</CardTitle>
+          </CardHeader>
+          <CardContent className="h-full">
+            <GeographicalHeatMap leads={leads} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  )
-}
+  );
+};
+
+const daysInMonth = (date: Date) => {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+};
 
 const CalendarPage = () => {
-  const { leads } = useLeadsData()
-
-  const appointments = leads.filter(lead => lead.analysis?.appointment_booked)
-
-  const [view, setView] = useState<'day' | 'week' | 'month'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [selectedAppointment, setSelectedAppointment] = useState<Lead | null>(null)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
 
-  const renderDayView = () => {
-    const dayAppointments = appointments.filter(app => 
-      new Date(app.analysis.appointment_date!).toDateString() === currentDate.toDateString()
-    )
-    return (
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">{currentDate.toDateString()}</h2>
-        </div>
-        <div className="divide-y">
-          {dayAppointments.map(app => (
-            <div key={app.id} className="p-4 hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedAppointment(app as unknown as Lead)}>
-              <p className="font-semibold">{app.analysis?.appointment_time}</p>
-              <p>{app.name}</p>
-              <p className="text-sm text-gray-500">{app.use_case}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    fetchAppointmentsData()
+  }, [])
 
-  const renderWeekView = () => {
-    const weekStart = new Date(currentDate)
-    weekStart.setDate(currentDate.getDate() - currentDate.getDay())
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const day = new Date(weekStart)
-      day.setDate(weekStart.getDate() + i)
-      return day
-    })
-
-    return (
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="grid grid-cols-7 gap-px bg-gray-200">
-          {days.map(day => (
-            <div key={day.toISOString()} className="bg-white p-2">
-              <h3 className="text-sm font-semibold">{day.toLocaleDateString('en-US', { weekday: 'short' })}</h3>
-              <p className="text-xs text-gray-500">{day.getDate()}</p>
-              {appointments
-                .filter(app => app.analysis?.appointment_date && new Date(app.analysis.appointment_date).toDateString() === day.toDateString())
-                .map(app => (
-                  <div key={app.id} className="mt-1 p-1 bg-blue-100 rounded text-xs cursor-pointer" onClick={() => setSelectedAppointment(app as unknown as Lead)}>
-                    {app.analysis?.appointment_time ? `${app.analysis.appointment_time} - ${app.name}` : `${app.name}`}
-                  </div>
-                ))
-              }
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  const renderMonthView = () => {
-    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
-    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
-    const cells = Array(35).fill(null)
-
-    for (let i = 0; i < daysInMonth; i++) {
-      cells[i + firstDayOfMonth] = i + 1
+  const fetchAppointmentsData = async () => {
+    try {
+      const appointmentsData = await fetchAppointments();
+      setAppointments((prevAppointments) => [
+        ...prevAppointments,
+        ...appointmentsData.map((appointment) => ({
+          ...appointment,
+          name: appointment.name || '',
+          use_case: appointment.use_case || '',
+          phone_number: appointment.phone_number || '',
+        })),
+      ]);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
     }
+  }
 
-    return (
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="grid grid-cols-7 gap-px bg-gray-200">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="bg-gray-100 p-2 text-center text-xs font-semibold">{day}</div>
-          ))}
-          {cells.map((day, index) => (
-            <div
-              key={index}
-              className={`bg-white p-2 h-24 ${day ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-              onClick={() => day && setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
-            >
-              {day && (
-                <>
-                  <p className={`text-sm ${selectedDate?.getDate() === day ? 'font-bold' : ''}`}>{day}</p>
-                  {appointments
-                    .filter(app => {
-                      const appDate = new Date(app.analysis.appointment_date!)
-                      return appDate.getFullYear() === currentDate.getFullYear() &&
-                             appDate.getMonth() === currentDate.getMonth() &&
-                             appDate.getDate() === day
-                    })
-                    .map(app => (
-                      <div
-                        key={app.id}
-                        className="mt-1 p-1 bg-blue-100 rounded text-xs cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedAppointment(app as unknown as SetStateAction<Lead | null>)
-                        }}
-                      >
-                        {app.analysis?.appointment_time ? app.analysis.appointment_time : 'No appointment time'} - {app.name}
-                      </div>
-                    ))
-                  }
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+  const getDaysInMonth = (date: Date): number => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const daysInMonth = getDaysInMonth(currentDate);
+  const startDate = startOfMonth(currentDate);
+  const endDate = endOfMonth(currentDate);
+
+  const handlePrevMonth = () => {
+    setCurrentDate(subMonths(currentDate, 1))
+  }
+
+  const handleNextMonth = () => {
+    setCurrentDate(addMonths(currentDate, 1))
+  }
+
+  const handleAppointmentClick = (appointment: Appointment) => {
+    setSelectedAppointment(appointment)
   }
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="p-4">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Calendar</h1>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
-          >
+        <h2 className="text-2xl font-bold">{format(currentDate, 'MMMM yyyy')}</h2>
+        <div>
+          <Button onClick={handlePrevMonth} className="mr-2">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentDate(new Date())}
-          >
-            Today
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
-          >
+          <Button onClick={handleNextMonth}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl">
-          {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-        </h2>
-        <Select value={view} onValueChange={(value: 'day' | 'week' | 'month') => setView(value)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select view" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="day">Day</SelectItem>
-            <SelectItem value="week">Week</SelectItem>
-            <SelectItem value="month">Month</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-7 gap-2">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div key={day} className="text-center font-bold">
+            {day}
+          </div>
+        ))}
+        {Array.from({ length: startDate.getDay() }).map((_, index) => (
+          <div key={`empty-${index}`} />
+        ))}
+        {Array.from({ length: daysInMonth }).map((_, index) => {
+          const date = addDays(startDate, index)
+          const appointmentsForDay = appointments.filter(
+            (appointment) => appointment.date === format(date, 'yyyy-MM-dd')
+          )
+          return (
+            <div
+              key={date.toString()}
+              className={`border p-2 ${
+                isSameMonth(date, currentDate) ? '' : 'text-gray-300'
+              }`}
+            >
+              <div className="text-right">{format(date, 'd')}</div>
+              {appointmentsForDay.map((appointment) => (
+                <Button
+                  key={appointment.id}
+                  variant="outline"
+                  size="sm"
+                  className="mt-1 w-full text-left"
+                  onClick={() => handleAppointmentClick(appointment)}
+                >
+                  {appointment.time} - {appointment.name}
+                </Button>
+              ))}
+            </div>
+          )
+        })}
       </div>
-      {view === 'day' && renderDayView()}
-      {view === 'week' && renderWeekView()}
-      {view === 'month' && renderMonthView()}
       <Dialog open={!!selectedAppointment} onOpenChange={() => setSelectedAppointment(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Appointment Details</DialogTitle>
           </DialogHeader>
           {selectedAppointment && (
-            <div className="mt-4 space-y-4">
+            <div className="grid gap-4">
               <div>
                 <h4 className="text-sm font-medium">Date and Time</h4>
-                <p>{selectedAppointment?.analysis?.appointment?.date} at {selectedAppointment?.analysis?.appointment?.time}</p>
+                <p>{`${selectedAppointment.date} at ${selectedAppointment.time}`}</p>
               </div>
               <div>
-                <h4 className="text-sm font-medium">Client</h4>
-                <p>{selectedAppointment?.name}</p>
+                <h4 className="text-sm font-medium">Name</h4>
+                <p>{selectedAppointment.name}</p>
               </div>
               <div>
                 <h4 className="text-sm font-medium">Use Case</h4>
@@ -683,6 +670,10 @@ const CalendarPage = () => {
               <div>
                 <h4 className="text-sm font-medium">Phone Number</h4>
                 <p>{selectedAppointment.phone_number}</p>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium">Note</h4>
+                <p>{selectedAppointment.note}</p>
               </div>
             </div>
           )}
@@ -694,119 +685,226 @@ const CalendarPage = () => {
 
 const CallCard = ({ lead }: { lead: Lead }) => {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false)
+  const callDate = new Date(lead.created_at).toLocaleString()
+
+  const handleFollowUp = () => {
+    setShowFollowUpModal(true)
+  }
+
+  const handlePhoneClick = (phoneNumber: string) => {
+    window.location.href = `tel:${phoneNumber}`;
+  }
+
+  const handleEmailClick = (email: string) => {
+    window.location.href = `mailto:${email}`;
+  }
 
   return (
-    <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-xl font-bold">{lead.name}</CardTitle>
-          <Badge variant={lead.completed ? "success" : "secondary"}>
-            {lead.completed ? "Completed" : "Incomplete"}
-          </Badge>
+    <Card className="w-full mb-4">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div>
+          <CardTitle className="text-xl font-bold">
+            {lead.name || 'Unknown'}
+          </CardTitle>
+          <CardDescription>{callDate}</CardDescription>
         </div>
-        <CardDescription className="flex items-center text-sm text-muted-foreground">
-          <Phone className="w-4 h-4 mr-2" />
-          {lead.phone_number}
-        </CardDescription>
+        <Badge variant={lead.call_status === 'completed' ? 'success' : 'secondary'}>
+          {lead.call_status || 'Unknown'}
+        </Badge>
       </CardHeader>
       <CardContent>
+        <div className="flex flex-wrap items-center gap-4 mb-4">
+          <div className="flex items-center">
+            <Phone className="w-4 h-4 mr-2" />
+            <Button
+              variant="link"
+              className="p-0 h-auto text-sm text-blue-500 hover:underline"
+              onClick={() => handlePhoneClick(lead.phone_number) }
+            >
+              {lead.phone_number || 'N/A'}
+            </Button>
+          </div>
+          <div className="flex items-center">
+            <Mail className="w-4 h-4 mr-2" />
+            <Button
+              variant="link"
+              className="p-0 h-auto text-sm text-blue-500 hover:underline"
+              onClick={() => handleEmailClick(lead.email) }
+            >
+              {lead.email || 'N/A'}
+            </Button>
+          </div>
+          <div className="flex items-center">
+            <Building className="w-4 h-4 mr-2" />
+            <span className="text-sm">{lead.company || 'N/A'}</span>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-muted-foreground">Duration</span>
-            <span className="text-lg">{lead.call_length ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</span>
+          <div>
+            <h4 className="text-sm font-medium mb-1">Duration</h4>
+            <p>{lead.call_length != null ? `${lead.call_length.toFixed(2)} min` : 'N/A'}</p>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-muted-foreground">Cost</span>
-            <span className="text-lg">{lead.price ? `$${lead.price.toFixed(2)}` : 'N/A'}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-muted-foreground">Answered By</span>
-            <span className="text-lg">{lead.answered_by || 'N/A'}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-muted-foreground">Use Case</span>
-            <span className="text-lg">{lead.use_case || 'N/A'}</span>
+          <div>
+            <h4 className="text-sm font-medium mb-1">Cost</h4>
+            <p>${lead.price != null ? lead.price.toFixed(4) : 'N/A'}</p>
           </div>
         </div>
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2">Summary</h4>
-          <p className="text-sm">{lead.summary || 'No summary available'}</p>
+          <h4 className="text-sm font-medium mb-2">Summary</h4>
+          <p className="text-sm text-muted-foreground">
+            {lead.summary ? (isExpanded ? lead.summary : `${lead.summary.slice(0, 100)}...`) : 'N/A'}
+          </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full"
-        >
-          {isExpanded ? "Hide Details" : "Show Details"}
-          {isExpanded ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
-        </Button>
+        <div className="flex justify-between items-center mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? "Show Less" : "Show More"}
+            {isExpanded ? <ChevronUp className="ml-2 h-4 w-4" /> : <ChevronDown className="ml-2 h-4 w-4" />}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleFollowUp}
+          >
+            Follow Up
+          </Button>
+        </div>
         {isExpanded && (
           <div className="mt-4 space-y-4">
             <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Call Transcript</h4>
-              <div className="max-h-40 overflow-y-auto bg-muted/50 rounded-md p-2">
-                {lead.call_transcript && lead.call_transcript.length > 0 ? (
-                  lead.call_transcript.map((entry, index) => (
-                    <p key={index} className="text-sm mb-1">
-                      <strong>{entry.user}:</strong> {entry.text}
-                    </p>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No transcript available</p>
-                )}
-              </div>
+              <h4 className="text-sm font-medium mb-2">Use Case</h4>
+              <p className="text-sm">{lead.use_case || 'N/A'}</p>
             </div>
             <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Analysis</h4>
-              {lead.analysis ? (
-                <div className="space-y-2">
-                  <p><strong>Sentiment Score:</strong> {lead.analysis.sentiment_score?.toFixed(2) || 'N/A'}</p>
-                  <p><strong>Summary:</strong> {lead.analysis.summary || 'N/A'}</p>
-                  {lead.analysis.topics && (
-                    <div>
-                      <strong>Topics:</strong>
-                      <ul className="list-disc list-inside">
-                        {lead.analysis.topics.map((topic, index) => (
-                          <li key={index}>{topic}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {lead.analysis.action_items && (
-                    <div>
-                      <strong>Action Items:</strong>
-                      <ul className="list-disc list-inside">
-                        {lead.analysis.action_items.map((item, index) => (
-                          <li key={index}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {lead.analysis.questions && (
-                    <div>
-                      <strong>Questions:</strong>
-                      <ul className="list-disc list-inside">
-                        {lead.analysis.questions.map((question, index) => (
-                          <li key={index}>{question}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No analysis available</p>
-              )}
+              <h4 className="text-sm font-medium mb-2">Location</h4>
+              <p className="text-sm">{`${lead.city || 'Unknown'}, ${lead.state || 'Unknown'}, ${lead.country || 'Unknown'}`}</p>
+            </div>
+            {lead.recording_url && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Call Recording</h4>
+                <audio controls className="w-full">
+                  <source src={lead.recording_url} type="audio/wav" />
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
+            )}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Transcript</h4>
+              <div className="max-h-60 overflow-y-auto bg-gray-100 p-2 rounded">
+                {lead.concatenated_transcript ? (
+                  <p className="text-sm whitespace-pre-wrap">{lead.concatenated_transcript}</p>
+                ) : (
+                  <p>No transcript available</p>
+                )}
+              </div>
             </div>
           </div>
         )}
       </CardContent>
+      <FollowUpModal
+        isOpen={showFollowUpModal}
+        onClose={() => setShowFollowUpModal(false)}
+        lead={lead}
+      />
     </Card>
   )
 }
 
+const FollowUpModal = ({ isOpen, onClose, lead }: { isOpen: boolean; onClose: () => void; lead: Lead }) => {
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpTime, setFollowUpTime] = useState('')
+  const [followUpNote, setFollowUpNote] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    await addFollowUpToCalendar(lead, followUpDate, followUpTime, followUpNote)
+    onClose()
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Schedule Follow Up for {lead.name}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="followup-date" className="text-right">
+                Follow-up Date
+              </Label>
+              <Input
+                id="followup-date"
+                type="date"
+                className="col-span-3"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="followup-time" className="text-right">
+                Follow-up Time
+              </Label>
+              <Input
+                id="followup-time"
+                type="time"
+                className="col-span-3"
+                value={followUpTime}
+                onChange={(e) => setFollowUpTime(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="followup-note" className="text-right">
+                Note
+              </Label>
+              <Textarea
+                id="followup-note"
+                className="col-span-3"
+                value={followUpNote}
+                onChange={(e) => setFollowUpNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit">Schedule Follow Up</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const addFollowUpToCalendar = async (lead: Lead, date: string, time: string, note: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('appointments')
+      .insert({
+        lead_id: lead.id,
+        date: date,
+        time: time,
+        note: note,
+        name: lead.name,
+        email: lead.email,
+        phone_number: lead.phone_number,
+        use_case: lead.use_case
+      })
+
+    if (error) throw error
+
+    console.log('Follow-up added to calendar:', data)
+  } catch (error) {
+    console.error('Error adding follow-up to calendar:', error)
+  }
+}
+
 export function VoiceAiCallData() {
-  const [activeView, setActiveView] = useState('dashboard')
+  const [activeView, setActiveView] = useState('dashboard');
 
   return (
     <div className="flex h-screen">

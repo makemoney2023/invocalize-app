@@ -4,6 +4,11 @@ import { fetchLeads } from '@/api/leads'
 import { sendCallSummaryEmail } from '@/utils/sendemail';
 
 export interface Lead {
+  state: string;
+  city: string;
+  status: string;
+  location: string;
+  country: string; // ISO 3166-1 alpha-2 country code
   id: string;
   name: string;
   email: string;
@@ -26,6 +31,9 @@ export interface Lead {
   error_message: string | null;
   variables?: {
     city?: string;
+    state?: string;
+    latitude?: number;
+    longitude?: number;
     [key: string]: any;
   };
   answered_by: string;
@@ -55,8 +63,10 @@ export interface Lead {
     user: string;
     created_at: string;
   }> | [];
-  concatenated_transcript: string;
+  concatenated_transcript?: string;
   analysis: {
+    key_points: any;
+    customer_satisfaction: any;
     appointment: any;
     appointment_date?: string;
     appointment_time?: string;
@@ -70,6 +80,10 @@ export interface Lead {
   pathway: any;
   created_at: string;
   updated_at: string;
+  transcripts: Array<{
+    user: string;
+    text: string;
+  }>;
 }
 
 export function useLeadsData() {
@@ -146,6 +160,7 @@ export function useLeadsData() {
       }
 
       const analysisData = await response.json();
+      console.log('Analysis data:', analysisData);
 
       // Update the lead in the database with the new analysis data
       const { error } = await supabase

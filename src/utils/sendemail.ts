@@ -19,10 +19,8 @@ export async function sendCallSummaryEmail(lead: Lead) {
     <p>${lead.summary}</p>
     <h2>Transcript</h2>
     <div>
-      ${lead.call_transcript && lead.call_transcript.length > 0
-        ? lead.call_transcript.map(entry => `
-            <p><strong>${entry.user}:</strong> ${entry.text}</p>
-          `).join('')
+      ${lead.concatenated_transcript
+        ? `<p>${lead.concatenated_transcript}</p>`
         : '<p>No transcript available</p>'
       }
     </div>
