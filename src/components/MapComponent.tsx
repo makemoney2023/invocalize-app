@@ -3,18 +3,24 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Lead } from '@/hooks/useLeadsData';
+import { parseWKB } from '@/utils/geoUtils';
 
 const MapComponent: React.FC<{ leads: Lead[] }> = ({ leads }) => {
   const [markers, setMarkers] = useState<{ position: [number, number]; lead: Lead }[]>([]);
 
   useEffect(() => {
     const fetchCoordinates = async () => {
-      const newMarkers = leads.filter(lead => 
-        lead.variables?.latitude && lead.variables?.longitude
-      ).map(lead => ({
-        position: [lead.variables!.latitude!, lead.variables!.longitude!] as [number, number],
-        lead
-      }));
+      const newMarkers = leads
+        .filter(lead => lead.location)
+        .map(lead => {
+          console.log('Lead location data:', lead.location);
+          const coordinates = parseWKB(lead.location);
+          return coordinates ? {
+            position: coordinates,
+            lead
+          } : null;
+        })
+        .filter((marker): marker is { position: [number, number]; lead: Lead } => marker !== null);
       setMarkers(newMarkers);
     };
 

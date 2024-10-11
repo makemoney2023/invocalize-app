@@ -2,12 +2,12 @@ import { useState, useEffect, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchLeads } from '@/api/leads'
 import { sendCallSummaryEmail } from '@/utils/sendemail';
+import { updateLeadWithGeoData } from '@/utils/geoUtils';
 
 export interface Lead {
   state: string;
   city: string;
   status: string;
-  location: string;
   country: string; // ISO 3166-1 alpha-2 country code
   id: string;
   name: string;
@@ -84,6 +84,7 @@ export interface Lead {
     user: string;
     text: string;
   }>;
+  location?: string; // WKB format
 }
 
 export function useLeadsData() {
@@ -121,6 +122,13 @@ export function useLeadsData() {
 
   async function handleLeadChange(payload: any) {
     console.log('Lead change detected:', payload);
+
+    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+      const lead = payload.new;
+      if (lead.city && lead.state && lead.country) {
+        await updateLeadWithGeoData(lead.id, lead.city, lead.state, lead.country);
+      }
+    }
 
     if (payload.eventType === 'UPDATE' && payload.new.completed && !payload.old.completed) {
       console.log('Call completed, sending email for lead:', payload.new.id);
