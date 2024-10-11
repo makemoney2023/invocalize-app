@@ -804,6 +804,12 @@ const CallCard = ({ lead }: { lead: Lead }) => {
             </div>
           </div>
         )}
+        {isExpanded && lead.ai_analysis && (
+          <div className="mt-4">
+            <h4 className="text-sm font-medium mb-2">AI Analysis</h4>
+            <p className="text-sm text-muted-foreground">{lead.ai_analysis}</p>
+          </div>
+        )}
       </CardContent>
       <FollowUpModal
         isOpen={showFollowUpModal}

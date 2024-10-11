@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchLeads } from '@/api/leads'
 import { sendCallSummaryEmail } from '@/utils/sendemail';
 import { updateLeadWithGeoData } from '@/utils/geoUtils';
+import OpenAI from 'openai'
 
 export interface Lead {
   state: string;
@@ -85,6 +86,44 @@ export interface Lead {
     text: string;
   }>;
   location?: string; // WKB format
+  ai_analysis?: string;
+  call_analyses?: {
+    sentiment_score: number;
+    key_points: string[];
+    customer_satisfaction: string;
+    appointment_details: string;
+  }[];
+}
+
+async function analyzeTranscript(transcript: string) {
+  console.log('Starting transcript analysis');
+  try {
+    console.log('Sending request to /api/analyze-transcript');
+    const response = await fetch('/api/analyze-transcript', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ transcript }),
+    });
+
+    console.log('Received response from /api/analyze-transcript');
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Error response:', response.status, response.statusText, errorData);
+      throw new Error(errorData.error || 'Failed to analyze transcript');
+    }
+
+    const analysis = await response.json();
+    console.log('Analysis result:', analysis);
+    return analysis.result;
+  } catch (error) {
+    console.error('Error analyzing transcript:', error);
+    return null;
+  }
 }
 
 export function useLeadsData() {
@@ -122,11 +161,32 @@ export function useLeadsData() {
 
   async function handleLeadChange(payload: any) {
     console.log('Lead change detected:', payload);
-
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
       const lead = payload.new;
       if (lead.city && lead.state && lead.country) {
+        console.log(`Updating geo data for lead ${lead.id}`);
         await updateLeadWithGeoData(lead.id, lead.city, lead.state, lead.country);
+      }
+
+      if (lead.concatenated_transcript) {
+        const analysis = await analyzeTranscript(lead.concatenated_transcript);
+        if (analysis) {
+          const { error } = await supabase
+            .from('call_analyses')
+            .insert({
+              lead_id: lead.id,
+              sentiment_score: extractSentimentScore(analysis),
+              key_points: extractKeyPoints(analysis),
+              customer_satisfaction: extractCustomerSatisfaction(analysis),
+              appointment_details: extractAppointmentDetails(analysis)
+            });
+
+          if (error) {
+            console.error('Error inserting call analysis:', error);
+          } else {
+            console.log('Successfully inserted call analysis');
+          }
+        }
       }
     }
 
@@ -189,3 +249,19 @@ export function useLeadsData() {
 
   return { leads, loading, error }
 }
+
+function extractSentimentScore(analysis: any): any {
+  throw new Error('Function not implemented.');
+}
+function extractKeyPoints(analysis: any): any {
+  throw new Error('Function not implemented.');
+}
+
+function extractCustomerSatisfaction(analysis: any): any {
+  throw new Error('Function not implemented.');
+}
+
+function extractAppointmentDetails(analysis: any): any {
+  throw new Error('Function not implemented.');
+}
+

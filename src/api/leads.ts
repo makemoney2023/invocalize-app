@@ -16,7 +16,14 @@ export interface Appointment {
 export const fetchLeads = async (): Promise<Lead[]> => {
   const { data, error } = await supabase
     .from('leads')
-    .select('*')
+    .select(`*,
+      call_analyses (
+        sentiment_score,
+        key_points,
+        customer_satisfaction,
+        appointment_details
+      )
+    `)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data as Lead[];

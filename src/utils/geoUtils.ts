@@ -19,24 +19,26 @@ export async function getGeoData(city: string, state: string, country: string): 
   return null;
 }
 
-export async function updateLeadWithGeoData(leadId: string, city: string, state: string, country: string) {
+export async function updateLeadWithGeoData(id: string, city: string, state: string, country: string) {
   const coordinates = await getGeoData(city, state, country);
-
   if (coordinates) {
-    const [longitude, latitude] = coordinates;
     const { error } = await supabase
       .from('leads')
       .update({
         location: {
           type: 'Point',
-          coordinates: [longitude, latitude]
+          coordinates: coordinates
         }
       })
-      .eq('id', leadId);
+      .eq('id', id);
 
     if (error) {
-      console.error('Error updating lead with geo data:', error);
+      console.error(`Error updating lead ${id} with geo data:`, error);
+    } else {
+      console.log(`Updated lead ${id} with coordinates:`, coordinates);
     }
+  } else {
+    console.log(`Could not find coordinates for lead ${id}`);
   }
 }
 
