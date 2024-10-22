@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { supabase } from '@/lib/supabase';
-import { getGeoData } from '@/utils/geoUtils';
+import { getGeoData, updateLeadWithGeoData } from '@/utils/geoUtils';
 
 async function updateGeoData() {
   const { data: leads, error } = await supabase
@@ -18,31 +18,21 @@ async function updateGeoData() {
     return;
   }
 
+  const concurrencyLimit = 5;
+  let activePromises: Promise<void>[] = [];
+
   for (const lead of leads) {
-    const coordinates = await getGeoData(lead.city, lead.state, lead.country);
-    if (coordinates) {
-      const { error: updateError } = await supabase
-        .from('leads')
-        .update({
-          location: {
-            type: 'Point',
-            coordinates: coordinates
-          }
-        })
-        .eq('id', lead.id);
+    const promise = updateLeadWithGeoData(lead.id, lead.city, lead.state, lead.country);
+    activePromises.push(promise);
 
-      if (updateError) {
-        console.error(`Error updating lead ${lead.id}:`, updateError);
-      } else {
-        console.log(`Updated lead ${lead.id} with coordinates:`, coordinates);
-      }
-    } else {
-      console.log(`Could not find coordinates for lead ${lead.id}`);
+    if (activePromises.length >= concurrencyLimit) {
+      await Promise.race(activePromises).catch(console.error);
+      activePromises = activePromises.filter(p => p !== promise);
     }
-
-    // Add a delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 1000));
   }
+
+  await Promise.all(activePromises).catch(console.error);
+  console.log('Geo data update completed.');
 }
 
 updateGeoData().catch(console.error);

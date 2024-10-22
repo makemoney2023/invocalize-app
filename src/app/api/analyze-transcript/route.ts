@@ -1,30 +1,77 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { z } from 'zod';
+import { analyzeTranscript } from '@/utils/analysisUtils';
+import { supabase } from '@/lib/supabase';
+import { CallAnalysis } from '@/types/lead';
 
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+const requestSchema = z.object({
+  leadId: z.string().or(z.number()).transform((val) => String(val)),
+  transcript: z.string(),
 });
 
 export async function POST(req: Request) {
+  console.log('Received analyze-transcript POST request');
   try {
-    const { transcript } = await req.json();
-    console.log('Received transcript:', transcript);
+    const body = await req.json();
+    console.log('Received body:', body);
+    const { leadId, transcript } = requestSchema.parse(body);
+    console.log('Parsed leadId:', leadId, 'Transcript length:', transcript.length);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        { role: "system", content: "You are a helpful assistant that analyzes call transcripts and provides sentiment analysis and action items." },
-        { role: "user", content: `Please analyze this transcript and provide key points, customer satisfaction and provide a sentiment analysis score as a number between 0 and 10 and any appointment details:\n\n${transcript}` }
-      ],
+    console.log('Calling analyzeTranscript function');
+    const analysis = await analyzeTranscript(transcript);
+    console.log('Received analysis:', analysis);
+
+    // Validate analysis object
+    if (
+      typeof analysis.sentiment_score !== 'number' ||
+      !Array.isArray(analysis.key_points) ||
+      typeof analysis.customer_satisfaction !== 'string' ||
+      typeof analysis.appointment_details !== 'string'
+    ) {
+      throw new Error('Invalid analysis structure');
+    }
+
+    // Save analysis results to the database
+    console.log('Saving analysis to Supabase:', {
+      lead_id: leadId,
+      sentiment_score: analysis.sentiment_score,
+      key_points: analysis.key_points,
+      customer_satisfaction: analysis.customer_satisfaction,
+      appointment_details: analysis.appointment_details,
     });
 
-    const result = completion.choices[0].message.content;
-    console.log('OpenAI API response:', completion);
-    console.log('Analysis result:', result);
+    const { data, error } = await supabase
+      .from('call_analyses')
+      .insert({
+        lead_id: leadId,
+        sentiment_score: analysis.sentiment_score,
+        key_points: analysis.key_points,
+        customer_satisfaction: analysis.customer_satisfaction,
+        appointment_details: analysis.appointment_details,
+      })
+      .select() // Add this line to return the inserted row
 
-    return NextResponse.json({ result });
-  } catch (error) {
-    console.error('Error in analyze-transcript:', error);
-    return NextResponse.json({ error: 'An error occurred while analyzing the transcript' }, { status: 500 });
+    console.log('Supabase insert operation result:', { data, error });
+
+    if (error) {
+      console.error('Error storing analysis in Supabase:', error);
+      return NextResponse.json({ error: 'Failed to store analysis', details: error }, { status: 500 });
+    }
+
+    if (!data || data.length === 0) {
+      console.error('No data returned from Supabase insert');
+      return NextResponse.json({ error: 'Failed to store analysis', details: 'No data returned' }, { status: 500 });
+    }
+
+    // If insertion is successful, return success response
+    console.log('Analysis stored successfully:', data[0]);
+    return NextResponse.json({ message: 'Analysis stored successfully', data: data[0] }, { status: 200 });
+  } catch (error: unknown) {
+    console.error('Error in analyze-transcript API route:', error);
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    } else {
+      return NextResponse.json({ error: 'Failed to analyze transcript' }, { status: 500 });
+    }
   }
 }

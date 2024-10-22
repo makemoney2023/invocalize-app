@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Lead } from '@/hooks/useLeadsData';
+import { Lead } from '@/types/lead';
 
 export interface Appointment {
   id: string;
@@ -16,7 +16,17 @@ export interface Appointment {
 export const fetchLeads = async (): Promise<Lead[]> => {
   const { data, error } = await supabase
     .from('leads')
-    .select(`*,
+    .select(`
+      id,
+      name,
+      email,
+      phone_number,
+      use_case,
+      created_at,
+      call_length,
+      price,
+      summary,
+      concatenated_transcript,
       call_analyses (
         sentiment_score,
         key_points,

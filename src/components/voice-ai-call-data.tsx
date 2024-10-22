@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, Key, ReactNode, Suspense, AwaitedReactNode, JSXElementConstructor, ReactElement, ReactPortal, SetStateAction, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { Key, ReactNode, Suspense, AwaitedReactNode, JSXElementConstructor, ReactElement, ReactPortal, SetStateAction } from 'react'
 import { ChevronDown, ChevronUp, Phone, Smile, Meh, Frown, List, Grid, X, Calendar as CalendarIcon, Settings, LayoutDashboard, Menu, Clock, Voicemail, PhoneForwarded, BarChart, ChevronLeft, ChevronRight, FileText, Caravan, Truck, Bus, Mail, CheckCircle, DollarSign, Building } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -46,7 +47,7 @@ import { calculateAverageDuration } from '@/utils/calculateAverageDuration'
 import GeographicalHeatMap from './GeographicalHeatMap'
 import DarkModeToggle from '@/components/DarkModeToggle'
 
-import { Lead } from '@/hooks/useLeadsData'
+import { Lead } from '@/types/lead'
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { DialogFooter } from "@/components/ui/dialog"

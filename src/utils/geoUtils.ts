@@ -22,13 +22,26 @@ export async function getGeoData(city: string, state: string, country: string): 
 export async function updateLeadWithGeoData(id: string, city: string, state: string, country: string) {
   const coordinates = await getGeoData(city, state, country);
   if (coordinates) {
+    const [longitude, latitude] = coordinates;
+
+    if (
+      typeof latitude !== 'number' ||
+      typeof longitude !== 'number' ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      console.error(`Invalid coordinates for lead ${id}:`, coordinates);
+      return;
+    }
+
     const { error } = await supabase
       .from('leads')
       .update({
-        location: {
-          type: 'Point',
-          coordinates: coordinates
-        }
+        location: `POINT(${longitude} ${latitude})`,
+        latitude: latitude,
+        longitude: longitude
       })
       .eq('id', id);
 
@@ -57,22 +70,19 @@ export function parseWKB(wkb: string | any): [number, number] | null {
     return null;
   }
 
-  // Check if the string starts with the WKB header
-  if (!wkbString.startsWith('0101000020E6100000')) {
-    console.error('Invalid WKB header:', wkbString);
+  // Example WKB parsing logic (ensure it matches your WKB structure)
+  try {
+    // Remove byte order and type information if present
+    const cleanWKB = wkbString.slice(18);
+    const x = cleanWKB.slice(0, 16);
+    const y = cleanWKB.slice(16);
+
+    const lon = Buffer.from(x, 'hex').readDoubleLE(0);
+    const lat = Buffer.from(y, 'hex').readDoubleLE(0);
+
+    return [lat, lon];
+  } catch (error) {
+    console.error('Error parsing WKB:', error);
     return null;
   }
-
-  // Remove the '0101000020E6100000' prefix
-  const cleanWKB = wkbString.slice(18);
-
-  // Split the remaining string into two 16-character parts
-  const x = cleanWKB.slice(0, 16);
-  const y = cleanWKB.slice(16);
-
-  // Convert hex to float
-  const lon = Buffer.from(x, 'hex').readDoubleLE(0);
-  const lat = Buffer.from(y, 'hex').readDoubleLE(0);
-
-  return [lat, lon];
 }
