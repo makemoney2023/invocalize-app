@@ -1,0 +1,6 @@
+.pokemonInfo.pokemonLoading {
+  opacity: 0.6;
+  transition: opacity 0ms;
+  transition-delay: 400ms;
+}
+

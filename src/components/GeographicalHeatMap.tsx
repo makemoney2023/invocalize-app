@@ -11,7 +11,7 @@ interface GeographicalHeatMapProps {
   leads: Lead[];
 }
 
-const GeographicalHeatMap: React.FC<GeographicalHeatMapProps> = ({ leads }) => {
+export const GeographicalHeatMap: React.FC<GeographicalHeatMapProps> = ({ leads }) => {
   if (leads.length === 0) {
     return (
       <div style={{ width: '100%', height: '400px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>

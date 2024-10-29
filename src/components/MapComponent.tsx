@@ -46,17 +46,23 @@ const MapComponent: React.FC<{ leads: Lead[] }> = ({ leads }) => {
           position={marker.position}
           icon={L.divIcon({
             className: 'custom-icon',
-            html: `<div style="background-color: #007bff; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; justify-content: center; align-items: center;">${marker.lead.variables?.city ? marker.lead.variables.city[0] : marker.lead.country[0]}</div>`
+            html: `<div style="background-color: #007bff; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; justify-content: center; align-items: center;">${
+              (marker.lead.variables && typeof marker.lead.variables === 'object' && 'city' in marker.lead.variables && typeof marker.lead.variables.city === 'string' && marker.lead.variables.city[0]) ||
+              (marker.lead.country && typeof marker.lead.country === 'string' && marker.lead.country[0]) ||
+              '?'
+            }</div>`
           })}
         >
           <Popup>
-            <div>
-              <h3>{marker.lead.name}</h3>
-              <p>Country: {marker.lead.country}</p>
-              <p>City: {marker.lead.variables?.city || 'Unknown'}</p>
-              <p>Call Duration: {marker.lead.call_length} minutes</p>
-              <p>Use Case: {marker.lead.use_case}</p>
-            </div>
+            {marker.lead && (
+              <div>
+                <h3>{marker.lead.name}</h3>
+                <p>Country: {marker.lead.country || 'Unknown'}</p>
+                <p>City: {marker.lead.variables && typeof marker.lead.variables === 'object' && 'city' in marker.lead.variables ? String(marker.lead.variables.city) : 'Unknown'}</p>
+                <p>Call Duration: {marker.lead.call_length ? `${marker.lead.call_length} minutes` : 'Unknown'}</p>
+                <p>Use Case: {marker.lead.use_case || 'Unknown'}</p>
+              </div>
+            )}
           </Popup>
         </Marker>
       ))}

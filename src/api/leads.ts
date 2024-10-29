@@ -1,49 +1,40 @@
-import { supabase } from '@/lib/supabase';
-import { Lead } from '@/types/lead';
+import { createClient } from '@/lib/supabase/client'
+import type { Database } from '@/lib/supabase/types'
+import { z } from 'zod'
+import { leadSchema } from '@/types/lead'
 
-export interface Appointment {
-  id: string;
-  lead_id: string;
-  date: string;
-  time: string;
-  note: string;
-  name: string;
-  email: string;
-  phone_number: string;
-  use_case: string;
-}
+type Lead = Database['public']['Tables']['leads']['Row']
+type Appointment = Database['public']['Tables']['appointments']['Row']
 
-export const fetchLeads = async (): Promise<Lead[]> => {
+export async function fetchLeads(): Promise<Lead[]> {
+  const supabase = createClient()
+
   const { data, error } = await supabase
     .from('leads')
     .select(`
-      id,
-      name,
-      email,
-      phone_number,
-      use_case,
-      created_at,
-      call_length,
-      price,
-      summary,
-      concatenated_transcript,
-      call_analyses (
-        sentiment_score,
-        key_points,
-        customer_satisfaction,
-        appointment_details
-      )
+      *,
+      call_analyses (*)
     `)
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data as Lead[];
-};
+    .order('created_at', { ascending: false })
 
-export const fetchAppointments = async (): Promise<Appointment[]> => {
+  if (error) throw error
+
+  return z.array(leadSchema).parse(data)
+}
+
+export async function fetchLeadWithAnalysis(leadId: string): Promise<Lead> {
+  const supabase = createClient()
+
   const { data, error } = await supabase
-    .from('appointments')
-    .select('*')
-    .order('date', { ascending: true });
-  if (error) throw new Error(error.message);
-  return data as Appointment[];
-};
+    .from('leads')
+    .select(`
+      *,
+      call_analyses (*)
+    `)
+    .eq('id', leadId)
+    .single()
+
+  if (error) throw error
+
+  return leadSchema.parse(data)
+}

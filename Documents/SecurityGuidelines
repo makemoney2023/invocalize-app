@@ -1,0 +1,133 @@
+# Security Guidelines
+
+## Overview
+
+This document outlines the security measures and best practices for the Voice AI Call Data Management System. It covers various aspects of security, including data protection, authentication, API security, and more.
+
+## Data Protection
+
+### Sensitive Information Handling
+
+1. **API Keys**: 
+   - Store all API keys (OpenAI, Supabase, email services) in environment variables.
+   - Reference:
+   ```typescript:src/utils/analysisUtils.ts
+   startLine: 4
+   endLine: 8
+   ```
+
+2. **Database Credentials**: 
+   - Never hardcode database credentials in the application code.
+   - Use Supabase's connection string which should be stored in environment variables.
+
+3. **Customer Data**: 
+   - Encrypt sensitive customer data at rest in the database.
+   - Implement field-level encryption for highly sensitive data like phone numbers.
+
+### Data in Transit
+
+1. **HTTPS**: Ensure all API endpoints and the web application are served over HTTPS.
+2. **API Communication**: Use secure methods for API communication, such as HTTPS for REST APIs or WebSocket Secure (WSS) for real-time data.
+
+## Authentication and Authorization
+
+1. **User Authentication**: 
+   - Implement robust user authentication using Supabase Auth.
+   - Use strong password policies and multi-factor authentication (MFA) for admin accounts.
+
+2. **JWT Tokens**: 
+   - Use short-lived JWT tokens for API authentication.
+   - Implement token refresh mechanisms to maintain user sessions securely.
+
+3. **Role-Based Access Control (RBAC)**:
+   - Define clear user roles (e.g., admin, agent, viewer).
+   - Implement RBAC in both frontend and backend to restrict access to sensitive operations and data.
+
+## API Security
+
+1. **Input Validation**: 
+   - Use Zod schemas to validate all input data.
+   - Reference:
+   ```typescript:src/utils/analysisUtils.ts
+   startLine: 21
+   endLine: 26
+   ```
+
+2. **Rate Limiting**: 
+   - Implement rate limiting on API endpoints to prevent abuse and DDoS attacks.
+
+3. **CORS (Cross-Origin Resource Sharing)**: 
+   - Configure CORS policies to restrict API access to known domains only.
+
+4. **API Versioning**: 
+   - Implement API versioning to maintain backward compatibility and secure deprecation of old endpoints.
+
+## Database Security
+
+1. **Row-Level Security (RLS)**:
+   - Implement RLS policies in Supabase to control data access at the database level.
+   - Ensure users can only access data they are authorized to view or modify.
+
+2. **SQL Injection Prevention**: 
+   - Use parameterized queries or ORM methods to prevent SQL injection attacks.
+   - Avoid using raw SQL queries with user input.
+
+3. **Regular Backups**: 
+   - Implement automated, encrypted backups of the database.
+   - Regularly test the restoration process to ensure data recoverability.
+
+## Frontend Security
+
+1. **XSS Prevention**: 
+   - Use React's built-in XSS protection by avoiding `dangerouslySetInnerHTML`.
+   - Sanitize any user-generated content before rendering.
+
+2. **Content Security Policy (CSP)**: 
+   - Implement a strict CSP to prevent XSS and other injection attacks.
+
+3. **Secure State Management**: 
+   - Do not store sensitive information in local storage or session storage.
+   - Use in-memory state or secure storage methods for sensitive data.
+
+## Third-Party Integrations
+
+1. **OpenAI API**: 
+   - Implement server-side API calls to OpenAI to keep the API key secure.
+   - Validate and sanitize all data sent to OpenAI to prevent prompt injection attacks.
+
+2. **Email Services (Resend, MailerSend)**: 
+   - Implement email sending logic server-side only.
+   - Validate email templates and content to prevent email injection attacks.
+
+## Logging and Monitoring
+
+1. **Secure Logging**: 
+   - Implement secure logging practices, avoiding logging of sensitive information.
+   - Use a centralized logging system for better security analysis.
+
+2. **Error Handling**: 
+   - Implement proper error handling to avoid exposing system details in error messages.
+   - Reference:
+   ```typescript:src/app/api/analyze-transcript/route.ts
+   startLine: 24
+   endLine: 32
+   ```
+
+3. **Security Monitoring**: 
+   - Implement real-time monitoring for suspicious activities.
+   - Set up alerts for unusual patterns or potential security breaches.
+
+## Compliance
+
+1. **Data Protection Regulations**: 
+   - Ensure compliance with relevant data protection regulations (e.g., GDPR, CCPA).
+   - Implement data retention and deletion policies.
+
+2. **Privacy Policy**: 
+   - Maintain an up-to-date privacy policy detailing data collection, usage, and protection practices.
+
+## Regular Security Audits
+
+1. **Code Reviews**: Conduct regular security-focused code reviews.
+2. **Penetration Testing**: Perform periodic penetration testing of the application
+

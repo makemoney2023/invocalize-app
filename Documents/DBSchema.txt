@@ -1,0 +1,230 @@
+Database Schema Documentation
+Below is a detailed description of the database schema used in the Voice AI Call Data Management System. This documentation includes the tables, their columns, data types, relationships, and any constraints or indexes.
+---
+Overview
+The database is built using Supabase, which provides a PostgreSQL database along with additional features like real-time subscriptions and authentication. The schema is designed to handle leads, call analyses, appointments, and any associated data.
+---
+ER Diagram
+An Entity-Relationship (ER) diagram would be here if visual representation was possible.
+---
+Tables and Schemas
+1. leads Table
+Purpose: Stores information about leads generated from calls, including personal details, call metadata, and transcripts.
+Columns:
+id: uuid (Primary Key)
+Description: Unique identifier for each lead.
+name: text
+Description: Full name of the lead.
+email: text
+Description: Email address of the lead.
+phone_number: text
+Description: Contact phone number.
+use_case: text
+Description: Use case or service the lead is interested in.
+created_at: timestamp with time zone (Default: now())
+Description: Timestamp when the lead was created.
+call_length: integer
+Description: Duration of the call in seconds.
+price: numeric
+Description: Price quoted or associated with the lead.
+summary: text
+Description: Summary of the call.
+concatenated_transcript: text
+Description: Full transcript of the call.
+city: text
+Description: City derived from phone number or input.
+state: text
+Description: State derived from phone number or input.
+country: text
+Description: Country derived from phone number or input.
+recording_url: text
+Description: URL to access the call recording.
+geo_data_updated: boolean (Default: false)
+Description: Indicates if geo data has been updated.
+Indexes:
+Primary Key on id.
+Index on created_at for ordering.
+2. call_analyses Table
+Purpose: Stores AI-generated analysis results for each call transcript.
+Columns:
+id: uuid (Primary Key)
+Description: Unique identifier for each analysis.
+lead_id: uuid (Foreign Key to leads.id)
+Description: Identifier of the lead this analysis is associated with.
+sentiment_score: numeric
+Description: Sentiment score between 0 and 1.
+key_points: text[]
+Description: Array of key points extracted from the call.
+customer_satisfaction: text
+Description: Assessment of customer satisfaction.
+appointment_details: text
+Description: Details about any appointments discussed or scheduled.
+created_at: timestamp with time zone (Default: now())
+Description: Timestamp when the analysis was created.
+Constraints:
+Foreign Key on lead_id referencing leads(id) with ON DELETE CASCADE.
+Indexes:
+Primary Key on id.
+Index on lead_id for faster joins with leads.
+3. appointments Table
+Purpose: Stores appointment data scheduled for leads.
+Columns:
+id: uuid (Primary Key)
+Description: Unique identifier for each appointment.
+lead_id: uuid (Foreign Key to leads.id)
+Description: Identifier of the lead the appointment is for.
+date: date
+Description: Date of the appointment.
+time: time without time zone
+Description: Time of the appointment.
+note: text
+Description: Additional notes or comments.
+name: text
+Description: Name of the contact person for the appointment.
+email: text
+Description: Email address for appointment correspondence.
+phone_number: text
+Description: Contact phone number for the appointment.
+use_case: text
+Description: Purpose or focus of the appointment.
+created_at: timestamp with time zone (Default: now())
+Description: Timestamp when the appointment was created.
+Constraints:
+Foreign Key on lead_id referencing leads(id) with ON DELETE SET NULL.
+Indexes:
+Primary Key on id.
+Index on date and time for scheduling.
+4. transcripts Table (Optional)
+Purpose: Stores individual messages or segments from call transcripts.
+Columns:
+id: uuid (Primary Key)
+Description: Unique identifier for each transcript entry.
+lead_id: uuid (Foreign Key to leads.id)
+Description: Identifier of the lead this transcript is associated with.
+speaker: text
+Description: Speaker identifier (e.g., "Agent", "Customer").
+text: text
+Description: Transcript content.
+created_at: timestamp with time zone (Default: now())
+Description: Timestamp when the transcript entry was created.
+Constraints:
+Foreign Key on lead_id referencing leads(id) with ON DELETE CASCADE.
+Indexes:
+Primary Key on id.
+Index on lead_id for faster retrieval.
+---
+Relationships
+One-to-Many (Leads to Call Analyses):
+A single lead can have multiple call analyses.
+Enforced via the lead_id foreign key in call_analyses.
+One-to-Many (Leads to Appointments):
+A lead can have multiple appointments.
+Enforced via the lead_id foreign key in appointments.
+One-to-Many (Leads to Transcripts):
+A lead can have multiple transcript entries.
+Enforced via the lead_id foreign key in transcripts.
+---
+Data Types and Constraints
+UUIDs: Used for primary keys to ensure uniqueness across tables.
+Timestamps: Use timezone-aware types to handle date and time correctly.
+Foreign Keys: Enforce referential integrity between tables.
+Arrays: Use of PostgreSQL array types (e.g., text[]) for storing lists like key_points.
+Numeric Types: Used for sentiment_score and price to allow decimal values
+
+Sample SQL Definitions
+leads Table
+CREATE TABLE leads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text,
+  email text,
+  phone_number text,
+  use_case text,
+  created_at timestamp with time zone DEFAULT now(),
+  call_length integer,
+  price numeric,
+  summary text,
+  concatenated_transcript text,
+  city text,
+  state text,
+  country text,
+  recording_url text,
+  geo_data_updated boolean DEFAULT false
+);
+
+CREATE TABLE call_analyses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid REFERENCES leads(id) ON DELETE CASCADE,
+  sentiment_score numeric,
+  key_points text[],
+  customer_satisfaction text,
+  appointment_details text,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE appointments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid REFERENCES leads(id) ON DELETE SET NULL,
+  date date,
+  time time without time zone,
+  note text,
+  name text,
+  email text,
+  phone_number text,
+  use_case text,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE transcripts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid REFERENCES leads(id) ON DELETE CASCADE,
+  speaker text,
+  text text,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+
+upabase Specifics
+Row-Level Security (RLS):
+Consider enabling RLS policies to manage data access based on user authentication.
+Define policies for each table to control SELECT, INSERT, UPDATE, DELETE operations.
+Real-Time Subscriptions:
+Supabase allows real-time listeners on tables.
+Used in the useLeadsData hook to subscribe to changes in the leads table.
+---
+Indexing and Performance
+Indexes:
+Ensure that frequently queried columns like created_at, lead_id, and date have indexes.
+Composite indexes can be used for combined queries (e.g., date and time in appointments).
+Query Optimization:
+Use EXPLAIN ANALYZE to understand query performance.
+Avoid unnecessary data retrieval by selecting only needed columns.
+---
+Data Validation and Integrity
+Constraints:
+Use NOT NULL constraints where applicable to ensure essential data is present.
+Implement CHECK constraints for data ranges (e.g., sentiment_score between 0 and 1).
+Foreign Keys:
+Ensure foreign keys have appropriate ON DELETE and ON UPDATE actions.
+ON DELETE CASCADE is used when deleting a lead should also delete related analyses or transcripts.
+---
+Migration Path and Tooling
+Drizzle ORM:
+Used for database migrations and schema definitions.
+Provides type-safe database interactions in TypeScript.
+Migration Scripts:
+Keep migration scripts version-controlled.
+Use migration tools provided by Drizzle ORM to apply changes.
+---
+Future Considerations
+Scaling:
+As data grows, consider partitioning large tables or archiving old data.
+Utilize Supabase's scaling options or consider moving to a dedicated PostgreSQL instance if needed.
+Backup and Recovery:
+Implement regular backups of the database.
+Test recovery procedures to ensure data can be restored in case of failure.
+Additional Tables:
+Users: If implementing authentication, a users table can store user profiles and roles.
+Notifications: A table to handle in-app notifications for leads or system alerts.
+---
+Conclusion
+This database schema is designed to efficiently store and manage data for the Voice AI Call Data Management System. It leverages PostgreSQL's robust feature set via Supabase, ensuring data integrity, scalability, and performance. The schema supports core functionalities like lead management, AI-driven call analysis, and appointment scheduling while being flexible for future enhancements.

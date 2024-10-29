@@ -1,0 +1,24 @@
+graph TD
+    A[Lead Insert into leads table] -->|Realtime Subscription| B[useLeadsData Hook]
+    B -->|handleLeadChange| C{Has concatenated_transcript?}
+    C -->|Yes| D[fetchAndUpdateAnalysis]
+    C -->|No| E[Skip Analysis]
+    
+    D -->|POST| F[/api/analyze-transcript]
+    F -->|OpenAI Analysis| G[Store in call_analyses]
+    
+    B -->|CRM Update| H[createOrUpdateCRMContact]
+    H -->|Insert/Update| I[crm_contacts table]
+    
+    F -->|Success| J[Send Email]
+    J -->|Email Sent| K[Log Activities]
+    
+    K -->|Insert| L[crm_activities]
+    K -->|Insert| M[email_logs]
+    
+    subgraph "Missing/Incomplete Updates"
+        L
+        M
+        G
+    end
+
