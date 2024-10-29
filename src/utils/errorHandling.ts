@@ -16,27 +16,21 @@ export function handleError(error: unknown, customMessage?: string) {
   console.error(error)
 
   if (error instanceof z.ZodError) {
-    toast({
-      title: 'Validation Error',
-      description: error.errors.map(e => e.message).join(', '),
-      variant: 'destructive'
+    toast.error('Validation Error', {
+      description: error.errors.map(e => e.message).join(', ')
     })
     return
   }
 
   if (error instanceof AppError) {
-    toast({
-      title: error.code || 'Error',
-      description: error.message,
-      variant: 'destructive'
+    toast.error(error.code || 'Error', {
+      description: error.message
     })
     return
   }
 
-  toast({
-    title: 'Error',
-    description: customMessage || 'An unexpected error occurred',
-    variant: 'destructive'
+  toast.error('Error', {
+    description: customMessage || 'An unexpected error occurred'
   })
 }
 

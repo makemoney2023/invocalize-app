@@ -2,7 +2,7 @@ import { withRetry } from '@/utils/retry'
 import { Logger } from '@/utils/logger'
 import { EmailService } from './emailService'
 import { OpenAI } from 'openai'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@supabase/supabase-js'
 import { ENV } from '@/lib/env'
 import { randomUUID } from 'crypto'
 import { RecommendationService } from './recommendationService'
@@ -12,9 +12,12 @@ import type { CallAnalysis } from '@/types/analysis'
 import type { FollowUpRecommendation } from './recommendationService'
 
 export class AnalysisService {
-  private supabase = createClient()
+  private supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   private openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY })
-  private emailService = new EmailService()
+  private emailService = EmailService.getInstance()
   private recommendationService = new RecommendationService()
 
   async analyzeTranscript(
@@ -26,8 +29,18 @@ export class AnalysisService {
       async () => {
         const analysis = await this.performAnalysis(transcript, leadId)
         const savedAnalysis = await this.saveAnalysis(leadId, analysis)
-        const recommendation = await this.recommendationService.generateRecommendation(savedAnalysis)
         
+        const { data: lead } = await this.supabase
+          .from('leads')
+          .select('*')
+          .eq('id', leadId)
+          .single()
+        
+        if (!lead) throw new Error('Lead not found')
+        
+        const recommendation = this.recommendationService.generateRecommendation(lead, savedAnalysis)
+        if (!recommendation) throw new Error('Failed to generate recommendation')
+
         await Promise.all([
           this.sendEmailIfPossible(leadId, savedAnalysis),
           this.saveRecommendation(recommendation)
@@ -87,20 +100,19 @@ export class AnalysisService {
 
       return {
         id: randomUUID(),
+        created_at: new Date().toISOString(),
         lead_id: leadId,
         content: validatedResult.summary,
-        sentiment: validatedResult.sentiment,
+        sentiment_score: validatedResult.sentiment,
         key_points: validatedResult.key_points,
+        customer_satisfaction: validatedResult.customer_satisfaction,
         topics_discussed: validatedResult.topics_discussed,
         action_items: validatedResult.action_items,
-        risk_level: validatedResult.risk_level,
-        created_at: new Date().toISOString()
+        risk_level: validatedResult.risk_level
       }
     } catch (error) {
-      if (error instanceof Error) {
-        throw new AppError('Failed to generate analysis', error.message)
-      }
-      throw new AppError('Failed to generate analysis', 'Unknown error occurred')
+      console.error('Error in analysis:', error)
+      throw error
     }
   }
 

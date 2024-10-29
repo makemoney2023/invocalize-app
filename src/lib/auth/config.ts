@@ -24,28 +24,25 @@ export const CLERK_CONFIG = {
   }
 } as const;
 
-export const AUTH_CONFIG = authConfigSchema.parse({
+export const AUTH_CONFIG = {
+  routes: {
+    signIn: '/login',
+    signUp: '/signup',
+    afterSignIn: '/dashboard',
+    afterSignUp: '/dashboard',
+    afterSignOut: '/login'
+  },
   publicRoutes: [
     '/',
-    '/sign-in',
-    '/sign-up',
-    '/sign-up/continue',
-    '/sign-up/sso-callback',
-    '/api/webhook',
+    '/login',
+    '/signup',
+    '/signup/sso-callback',
     '/api/webhooks/(.*)',
     '/api/public/(.*)',
-    '/_next/static/(.*)',
-    '/favicon.ico',
-  ],
-  adminRoutes: [
-    '/admin(.*)',
-    '/api/admin/(.*)',
-  ],
-  afterAuthRedirect: '/dashboard',
-  afterSignOutRedirect: '/sign-in',
-  signInUrl: '/sign-in',
-  signUpUrl: '/sign-up'
-});
+  ]
+} as const;
+
+export type AuthConfig = typeof AUTH_CONFIG;
 
 export const PUBLIC_ROUTES = ['/sign-in', '/sign-up'];
 

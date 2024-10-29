@@ -7,31 +7,18 @@ export const analysisResponseSchema = z.object({
   customer_satisfaction: z.enum(['satisfied', 'neutral', 'dissatisfied']),
   topics_discussed: z.array(z.string()),
   action_items: z.array(z.string()),
-  risk_level: z.enum(['high', 'medium', 'low'])
-})
-
-export type AnalysisResponse = z.infer<typeof analysisResponseSchema>
-
-export const callAnalysisSchema = z.object({
-  id: z.string(),
-  lead_id: z.string(),
-  content: z.string(),
-  sentiment: z.number(),
-  key_points: z.array(z.string()),
-  topics_discussed: z.array(z.string()),
-  action_items: z.array(z.string()),
-  risk_level: z.enum(['high', 'medium', 'low']),
-  created_at: z.string()
+  risk_level: z.enum(['low', 'medium', 'high'])
 })
 
 export type CallAnalysis = {
   id: string
+  created_at: string
+  sentiment_score: number
+  key_points: string[]
+  customer_satisfaction: "satisfied" | "neutral" | "dissatisfied"
   lead_id: string
   content: string
-  sentiment: number
-  key_points: string[]
   topics_discussed: string[]
   action_items: string[]
-  risk_level: 'high' | 'medium' | 'low'
-  created_at: string
+  risk_level: "low" | "medium" | "high"
 }

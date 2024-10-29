@@ -1,16 +1,10 @@
-import type { Metadata } from "next";
-import { Inter } from 'next/font/google';
-import { ClerkProvider } from '@clerk/nextjs';
+import { ClerkProvider } from "@clerk/nextjs";
+import { Inter } from "next/font/google";
 import { Navbar } from "@/components/navbar";
-import { CLERK_CONFIG } from "@/lib/auth/config";
+import { LayoutProvider } from "@/components/providers/layout-provider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: "Invocalize",
-  description: "AI Voice Calls Platform",
-};
+const inter = Inter({ subsets: ["latin"] });
 
 export default function RootLayout({
   children,
@@ -18,13 +12,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <ClerkProvider appearance={CLERK_CONFIG.appearance}>
-        <body className={inter.className}>
-          <Navbar />
-          {children}
-        </body>
-      </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ClerkProvider>
+          <LayoutProvider>
+            <div className="min-h-screen bg-background">
+              <Navbar />
+              {children}
+            </div>
+          </LayoutProvider>
+        </ClerkProvider>
+      </body>
     </html>
   );
 }

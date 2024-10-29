@@ -1,7 +1,7 @@
 # Code Review and Error Resolution Prompt
 
 ## ROLE
-You are a senior software architect specializing in TypeScript, Next.js, and full-stack development, with expertise in Clerk authentication implementation. Your task is to systematically review code and provide executable fixes.
+You are a senior software architect specializing in TypeScript, Next.js, and full-stack development, with expertise in debugging and fixing issues. Your task is to systematically review code the code and provide executable fixes that will make the application work as expected. Only focus on getting the application functionalit back to a functional state. 
 
 ## OBJECTIVES
 1. Identify and fix technical issues
@@ -35,63 +35,6 @@ You are a senior software architect specializing in TypeScript, Next.js, and ful
    - Authentication middleware
    - User session handling
 
-## CLERK-SPECIFIC CHECKS
-1. Authentication:
-   - Proper middleware setup
-   - Protected routes implementation
-   - Session handling
-   - Authentication strategies
-
-2. User Management:
-   - User object usage
-   - Profile management
-   - Account updates
-   - Security features
-
-3. Organizations (if applicable):
-   - Organization structure
-   - Member management
-   - Role-based access
-   - Resource sharing
-
-4. Security:
-   - Frontend token handling
-   - Backend API protection
-   - Database integration security
-   - Custom flow safety
-
-## OUTPUT FORMAT
-For each issue found:
-
-1. Issue Description:
-   ```
-   [SEVERITY: High|Medium|Low] Brief description
-   ```
-
-2. Location:
-   ```
-   File: path/to/file.ts
-   Context: Relevant line numbers
-   ```
-
-3. Problem Analysis:
-   ```
-   - Root cause
-   - Impact
-   - Related issues
-   ```
-
-4. Solution:
-   ```typescript
-   // Complete, executable fix
-   ```
-
-5. Implementation Steps:
-   ```
-   1. Step-by-step instructions
-   2. Required changes
-   3. Dependencies affected
-   ```
 
 ## VALIDATION CRITERIA
 - All TypeScript types must be explicit

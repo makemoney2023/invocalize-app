@@ -1,17 +1,17 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import DashboardView from "@/components/dashboard-view";
 
 export default async function Home() {
   const { userId } = await auth()
 
   if (!userId) {
-    redirect('/login')
+    redirect('/sign-in')
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <h1>Welcome to Invocalize</h1>
-      {/* Your page content */}
+    <main className="container mx-auto py-6">
+      <DashboardView />
     </main>
   )
 }

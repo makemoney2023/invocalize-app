@@ -45,7 +45,7 @@ type ResendEmailResponse = {
 export class EmailService {
   private static instance: EmailService
   private resend: Resend
-  private supabase = createClient()
+  private supabase = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY)
   private defaultFrom: string
 
   private constructor() {
@@ -74,6 +74,10 @@ export class EmailService {
 
   async sendCallSummaryEmail(lead: Lead, analysis: CallAnalysis): Promise<EmailResponse> {
     try {
+      if (!lead.email) {
+        throw new EmailError('Lead email is required')
+      }
+
       const response = await fetch('/api/render-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,7 +92,7 @@ export class EmailService {
 
       const emailResult = await this.resend.emails.send({
         from: `${ENV.EMAIL_FROM_NAME} <${this.defaultFrom}>`,
-        to: lead.email,
+        to: [lead.email],
         subject: `Call Summary for ${lead.name}`,
         html
       })

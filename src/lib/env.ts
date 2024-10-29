@@ -7,7 +7,9 @@ const envSchema = z.object({
   SUPABASE_URL: z.string(),
   SUPABASE_ANON_KEY: z.string(),
   RESEND_API_KEY: z.string(),
-  CLERK_WEBHOOK_SECRET: z.string()
+  CLERK_WEBHOOK_SECRET: z.string(),
+  EMAIL_FROM: z.string(),
+  EMAIL_FROM_NAME: z.string()
 })
 
 export const ENV = envSchema.parse({
@@ -17,5 +19,7 @@ export const ENV = envSchema.parse({
   SUPABASE_URL: process.env.SUPABASE_URL!,
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!,
   RESEND_API_KEY: process.env.RESEND_API_KEY!,
-  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET!
+  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET!,
+  EMAIL_FROM: process.env.EMAIL_FROM!,
+  EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME!
 })

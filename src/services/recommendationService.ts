@@ -1,58 +1,56 @@
-import { Lead, CallAnalysis } from '@/types/lead'
+import { Lead } from '@/types/lead'
+import { CallAnalysis } from '@/types/analysis'
 import { Logger } from '@/utils/logger'
 import { z } from 'zod'
 
 export const recommendationSchema = z.object({
-  leadId: z.string(),
-  priority: z.enum(['high', 'medium', 'low']),
+  leadId: z.string().uuid(),
+  priority: z.enum(['critical', 'high', 'medium', 'low']),
   recommendedTimeFrame: z.string(),
   reason: z.string(),
   suggestedTalkingPoints: z.array(z.string()),
   potentialValue: z.number(),
-  confidence: z.number(),
+  confidence: z.number().min(0).max(1),
   nextSteps: z.array(z.string()),
   created_at: z.string()
 })
 
 export type FollowUpRecommendation = z.infer<typeof recommendationSchema>
 
-export interface Recommendation {
-  priority: 'high' | 'medium' | 'low'
-  recommendedActions: string[]
-}
-
 export class RecommendationService {
-  generateRecommendation(analysis: CallAnalysis): FollowUpRecommendation {
-    try {
-      const priority = this.calculatePriority(analysis)
-      const timeFrame = this.getTimeFrame(priority)
-      
-      return recommendationSchema.parse({
-        leadId: analysis.lead_id,
-        priority,
-        recommendedTimeFrame: timeFrame,
-        reason: this.generateReason(priority, analysis),
-        suggestedTalkingPoints: this.generateTalkingPoints(analysis),
-        potentialValue: this.calculatePotentialValue(analysis),
-        confidence: analysis.sentiment,
-        nextSteps: this.generateNextSteps(priority, analysis),
-        created_at: new Date().toISOString()
-      })
-    } catch (error) {
-      Logger.log('Failed to generate recommendation', 'error', { showToast: true })
-      throw error
+  generateRecommendation(lead: Lead, analysis: CallAnalysis): FollowUpRecommendation {
+    const priority = this.calculatePriority(analysis)
+    const timeFrame = this.getRecommendedTimeFrame(priority)
+    const talkingPoints = this.generateTalkingPoints(lead, analysis)
+
+    return {
+      leadId: lead.id,
+      priority: priority,
+      recommendedTimeFrame: timeFrame,
+      reason: this.generateReason(analysis),
+      suggestedTalkingPoints: Array.from(talkingPoints),
+      potentialValue: this.calculatePotentialValue(lead),
+      confidence: this.calculateConfidence(analysis),
+      nextSteps: this.generateNextSteps(analysis),
+      created_at: new Date().toISOString()
     }
   }
 
-  private calculatePriority(analysis: CallAnalysis): 'high' | 'medium' | 'low' {
-    if (analysis.risk_level === 'high') return 'high'
-    if (analysis.sentiment >= 0.7) return 'high'
-    if (analysis.sentiment >= 0.4) return 'medium'
+  private calculatePriority(analysis: CallAnalysis): 'critical' | 'high' | 'medium' | 'low' {
+    if (analysis.customer_satisfaction === 'dissatisfied') {
+      return 'critical'
+    }
+    if (analysis.sentiment_score < 0.3) {
+      return 'high'
+    } else if (analysis.sentiment_score < 0.7) {
+      return 'medium'
+    }
     return 'low'
   }
 
-  private getTimeFrame(priority: string): string {
+  private getRecommendedTimeFrame(priority: string): string {
     switch (priority) {
+      case 'critical': return '12 hours'
       case 'high': return '24 hours'
       case 'medium': return '3 days'
       case 'low': return '1 week'
@@ -60,66 +58,40 @@ export class RecommendationService {
     }
   }
 
-  private generateReason(priority: 'high' | 'medium' | 'low', analysis: CallAnalysis): string {
-    const reasons = {
-      high: `High-value opportunity - Strong buying signals detected`,
-      medium: `Follow-up recommended - Moderate interest shown`,
-      low: `Routine follow-up - Positive interaction`
-    }
-    return reasons[priority]
-  }
-
-  private generateTalkingPoints(analysis: CallAnalysis): string[] {
-    const points: string[] = []
-
-    analysis.key_points.forEach((point: string) => {
-      if (point.toLowerCase().includes('price')) {
-        points.push(`Discuss pricing options - ${point}`)
-      } else if (point.toLowerCase().includes('feature')) {
-        points.push(`Highlight key features - ${point}`)
-      } else {
-        points.push(`Follow up on - ${point}`)
-      }
-    })
-
-    return [...new Set(points)]
-  }
-
-  private calculatePotentialValue(analysis: CallAnalysis): number {
-    let baseValue = 1000
+  private generateTalkingPoints(lead: Lead, analysis: CallAnalysis): Set<string> {
+    const points = new Set<string>()
     
-    if (analysis.sentiment >= 0.7) baseValue *= 1.5
-    if (analysis.sentiment >= 0.4) baseValue *= 0.8
-
-    return Math.round(baseValue)
+    analysis.key_points.forEach(point => points.add(point))
+    
+    if (analysis.customer_satisfaction === 'dissatisfied') {
+      points.add('Address previous concerns')
+    }
+    
+    return points
   }
 
-  private generateNextSteps(priority: 'high' | 'medium' | 'low', analysis: CallAnalysis): string[] {
-    const nextSteps: string[] = []
-
-    switch (priority) {
-      case 'high':
-        nextSteps.push('Discuss specific pricing options and packages')
-        nextSteps.push('Present ROI calculations')
-        break
-      case 'medium':
-        nextSteps.push('Address previous pricing concerns')
-        nextSteps.push('Highlight competitive advantages')
-        break
-      case 'low':
-        nextSteps.push('Address specific concerns raised')
-        nextSteps.push('Share relevant case studies/testimonials')
-        break
+  private generateReason(analysis: CallAnalysis): string {
+    if (analysis.customer_satisfaction === 'dissatisfied') {
+      return 'Customer showed signs of dissatisfaction'
     }
-
-    return nextSteps
+    return 'Regular follow-up recommended'
   }
 
-  async getRecommendationForLead(leadId: string): Promise<Recommendation> {
-    // Implementation here
-    return {
-      priority: 'medium',
-      recommendedActions: []
+  private calculatePotentialValue(lead: Lead): number {
+    return lead.price || 0
+  }
+
+  private calculateConfidence(analysis: CallAnalysis): number {
+    return (analysis.sentiment_score + 1) / 2
+  }
+
+  private generateNextSteps(analysis: CallAnalysis): string[] {
+    const steps = ['Schedule follow-up call']
+    
+    if (analysis.customer_satisfaction === 'dissatisfied') {
+      steps.push('Prepare resolution plan')
     }
+    
+    return steps
   }
 }

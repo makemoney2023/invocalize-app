@@ -1,6 +1,7 @@
 import { SignIn } from "@clerk/nextjs";
 import { Shell } from "@/components/ui/shell";
 import { type Theme } from "@clerk/types";
+import { AUTH_CONFIG } from "@/lib/auth/config";
 
 const clerkTheme: Theme = {
   elements: {
@@ -19,8 +20,8 @@ export function AuthLayout() {
           appearance={{
             elements: clerkTheme,
           }}
-          afterSignInUrl="/dashboard"
-          signUpUrl="/signup"
+          redirectUrl={AUTH_CONFIG.routes.afterSignIn}
+          signUpUrl={AUTH_CONFIG.routes.signUp}
         />
       </div>
     </Shell>

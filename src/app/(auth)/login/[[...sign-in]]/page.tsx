@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs"
+import { AUTH_CONFIG } from "@/lib/auth/config"
 
 export default function SignInPage() {
   return (
@@ -16,9 +17,9 @@ export default function SignInPage() {
           }
         }}
         routing="path"
-        path="/login"
-        afterSignInUrl="/"
-        signUpUrl="/sign-up"
+        path={AUTH_CONFIG.routes.signIn}
+        afterSignInUrl={AUTH_CONFIG.routes.afterSignIn}
+        signUpUrl={AUTH_CONFIG.routes.signUp}
       />
     </div>
   )

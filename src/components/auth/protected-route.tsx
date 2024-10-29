@@ -27,7 +27,7 @@ export function ProtectedRoute({
 
     if (requireAuth && !isSignedIn) {
       toast.error("Please sign in to access this page");
-      router.push("/sign-in");
+      router.push("/login");
       return;
     }
 
